@@ -62,6 +62,7 @@
 #define IDC_CHECK_PRESET_OFF_PROCESS    1128
 #define IDC_EDIT_PRESET_OFF_PROCESS     1129
 #define IDC_CHECK_PRESET_OFF_PROCESS_RESTORE 1130
+#define IDC_CHECK_IF_FULL_SCREEN_GAME   1131
 #define IDM_TRAY_OPEN                   50001
 #define IDM_TRAY_EXIT                   50002
 #define IDM_TRAY_PRESET_BASE            50100
@@ -72,7 +73,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        137
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1131
+#define _APS_NEXT_CONTROL_VALUE         1132
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

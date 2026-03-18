@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include <shellapi.h>
+
 #include "UserOption.hpp"
 
 class FilterKey
@@ -68,5 +70,53 @@ class FilterKey
     }
 
     return false;
+  }
+
+  // Elevated check
+  static bool IsProcessElevatedNow()
+  {
+    HANDLE token = nullptr;
+    if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token))
+      return false;
+
+    TOKEN_ELEVATION elevation = {};
+    DWORD           size      = 0;
+    const BOOL      ok        = ::GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size);
+    ::CloseHandle(token);
+
+    return (ok == TRUE && elevation.TokenIsElevated != 0);
+  }
+
+  // Restart current program
+  static bool RestartProgram(CWnd* close_target = nullptr, bool as_admin = false)
+  {
+    TCHAR exe_path[MAX_PATH] = {};
+
+    if (::GetModuleFileName(nullptr, exe_path, _countof(exe_path)) == 0)
+      return false;
+
+    const LPCTSTR verb          = as_admin ? _T("runas") : _T("open");
+    const LPCTSTR parameters    = _T("/restart-bypass-single-instance");
+    HINSTANCE     launch_result = ::ShellExecute(close_target ? close_target->GetSafeHwnd() : nullptr, verb, exe_path, parameters, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(launch_result) <= 32)
+      return false;
+
+    CWnd* close_wnd = nullptr;
+    if (close_target && ::IsWindow(close_target->GetSafeHwnd()))
+    {
+      // When called from child dialogs (e.g. debug dialog), close the app main window.
+      close_wnd = close_target->GetParent();
+      if (!close_wnd || !::IsWindow(close_wnd->GetSafeHwnd()))
+        close_wnd = close_target;
+    }
+    else
+    {
+      close_wnd = AfxGetMainWnd();
+    }
+
+    if (close_wnd && ::IsWindow(close_wnd->GetSafeHwnd()))
+      close_wnd->PostMessage(WM_CLOSE);
+
+    return true;
   }
 };

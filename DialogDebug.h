@@ -45,6 +45,7 @@ class DialogDebug : public CDialogEx, public DevLogSink
   afx_msg void OnBnClickedCheckAutoStart();
   afx_msg void OnBnClickedCheckPresetOffProcess();
   afx_msg void OnBnClickedCheckPresetOffProcessRestore();
+  afx_msg void OnBnClickedCheckIfFullScreenGame();
   afx_msg void OnEnKillFocusEditPresetOffProcess();
   DECLARE_MESSAGE_MAP()
 

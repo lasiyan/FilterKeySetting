@@ -42,6 +42,7 @@ class Tooltip
     { IDC_CHECK_PRESET_OFF_PROCESS, _T("프리셋이 설정된 상태에서 특정 프로세스에서 벗어나면 프리셋을 OFF로 전환합니다") },
     { IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, _T("프리셋이 OFF로 전환된 후, 다시 해당 프로세스에 진입하면 이전 프리셋으로 복원합니다\n단, 도중에 다른 프리셋으로 설정된 경우에는 복원되지 않습니다") },
     { IDC_EDIT_PRESET_OFF_PROCESS, _T("기능을 사용할 프로세스를 선택합니다(예: MapleStory.exe)\n마우스 클릭 시 선택창이 나타납니다\n마우스 우클릭 시 프로세스를 초기화합니다") },
+    { IDC_CHECK_IF_FULL_SCREEN_GAME, _T("체크하면 단축키 처리에 HotKey 대신 RawInput을 사용합니다\n전체화면 게임 환경 호환성 개선을 위한 옵션입니다\n일반 권한에서는 단축키가 동작하지 않을 수 있습니다") },
   };
 
  public:

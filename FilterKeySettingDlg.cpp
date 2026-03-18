@@ -21,6 +21,32 @@
 #include <algorithm>
 // clang-format on
 
+namespace {
+UINT ModifierMaskForVirtualKey(UINT vk)
+{
+  switch (vk)
+  {
+    case VK_SHIFT:
+    case VK_LSHIFT:
+    case VK_RSHIFT:
+      return MOD_SHIFT;
+    case VK_CONTROL:
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+      return MOD_CONTROL;
+    case VK_MENU:
+    case VK_LMENU:
+    case VK_RMENU:
+      return MOD_ALT;
+    case VK_LWIN:
+    case VK_RWIN:
+      return MOD_WIN;
+    default:
+      return 0;
+  }
+}
+}  // namespace
+
 #ifdef _DEBUG
   #define new DEBUG_NEW
 #endif
@@ -48,6 +74,7 @@ ON_WM_SIZE()
 ON_WM_TIMER()
 ON_WM_DESTROY()
 ON_WM_HOTKEY()
+ON_MESSAGE(WM_INPUT, &CFilterKeySettingDlg::OnRawInput)
 ON_MESSAGE(WM_TRAYICON_MSG, &CFilterKeySettingDlg::OnTrayIcon)
 ON_MESSAGE(WM_MOUSE_TRACKER_TRIGGERED, &CFilterKeySettingDlg::OnMouseTrackerTriggered)
 ON_MESSAGE(WM_DEV_DEBUG_CLOSED, &CFilterKeySettingDlg::OnDebugDialogClosed)
@@ -187,37 +214,65 @@ void CFilterKeySettingDlg::OnDestroy()
 
 void CFilterKeySettingDlg::OnHotKey(UINT nHotKeyId, UINT nKey1, UINT nKey2)
 {
-  if (nHotKeyId == static_cast<UINT>(KeyBinding::TOGGLE_HOTKEY_ID))
-  {
-    const int current_preset = static_cast<int>(GLOBAL_OPTION.getInteger(KEY_LAST_PRESET));
-    const int target_preset  = KeyBinding::ResolveToggleTargetPreset(current_preset, last_on_preset_, preset_count_);
-
-    if (!PRESET_IS_VALID(target_preset))
-      return;
-
-    ResetEditMode();
-    ActivatePreset(target_preset, FALSE, TRUE, _T("Toggle hotkey"));
-    return;
-  }
-
-  if (KeyBinding::IsEnabled() == false)
-  {
+  if (!HandleResolvedHotkeyId(nHotKeyId, false))
     CDialogEx::OnHotKey(nHotKeyId, nKey1, nKey2);
-    return;
-  }
+}
 
-  if (nHotKeyId < KeyBinding::HOTKEY_ID_BASE || nHotKeyId >= KeyBinding::HOTKEY_ID_BASE + static_cast<UINT>(preset_count_))
+LRESULT CFilterKeySettingDlg::OnRawInput(WPARAM wParam, LPARAM lParam)
+{
+  UNREFERENCED_PARAMETER(wParam);
+
+  if (!raw_input_registered_)
+    return 0;
+
+  UINT size = 0;
+  if (::GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER)) != 0 || size == 0)
+    return 0;
+
+  std::vector<BYTE> buffer(size);
+  if (::GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, buffer.data(), &size, sizeof(RAWINPUTHEADER)) != size)
+    return 0;
+
+  const auto* raw = reinterpret_cast<const RAWINPUT*>(buffer.data());
+  if (raw->header.dwType != RIM_TYPEKEYBOARD)
+    return 0;
+
+  const RAWKEYBOARD& keyboard = raw->data.keyboard;
+  UINT               vk       = keyboard.VKey;
+  if (vk == 0 || vk == 255)
+    return 0;
+
+  if (vk == VK_SHIFT)
+    vk = ::MapVirtualKey(keyboard.MakeCode, MAPVK_VSC_TO_VK_EX);
+  else if (vk == VK_CONTROL)
+    vk = (keyboard.Flags & RI_KEY_E0) ? VK_RCONTROL : VK_LCONTROL;
+  else if (vk == VK_MENU)
+    vk = (keyboard.Flags & RI_KEY_E0) ? VK_RMENU : VK_LMENU;
+
+  if (vk >= raw_input_key_down_.size())
+    return 0;
+
+  const bool key_down = ((keyboard.Flags & RI_KEY_BREAK) == 0);
+  UpdateRawInputModifierState(vk, key_down);
+
+  if (!key_down)
   {
-    CDialogEx::OnHotKey(nHotKeyId, nKey1, nKey2);
-    return;
+    raw_input_key_down_[vk] = false;
+    return 0;
   }
 
-  const int target_preset = nHotKeyId - KeyBinding::HOTKEY_ID_BASE;
-  if (PRESET_IS_VALID(target_preset) == false)
-    return;
+  if (raw_input_key_down_[vk])
+    return 0;
+  raw_input_key_down_[vk] = true;
 
-  ResetEditMode();
-  ActivatePreset(target_preset, FALSE, TRUE, _T("Preset hotkey"));
+  if (KeyBinding::IsModifierVirtualKey(vk))
+    return 0;
+
+  const int hotkey_id = ResolveRawInputHotkeyId(vk, raw_input_modifiers_down_);
+  if (hotkey_id >= 0)
+    HandleResolvedHotkeyId(static_cast<UINT>(hotkey_id), true);
+
+  return 0;
 }
 
 void CFilterKeySettingDlg::OnTimer(UINT_PTR nIDEvent)
@@ -448,6 +503,42 @@ void CFilterKeySettingDlg::RestoreFromTray()
 
 void CFilterKeySettingDlg::RegisterPresetHotkeys()
 {
+  const bool fullscreen_mode = (GLOBAL_OPTION.getInteger(KEY_IF_FULL_SCREEN_GAME, 0) != 0);
+  const bool any_enabled     = KeyBinding::IsEnabled() || KeyBinding::IsToggleEnabled();
+
+  if (!any_enabled)
+  {
+    if (using_raw_input_mode_)
+      DevLog::Write(_T("[Hotkey] mode changed: disabled"));
+    using_raw_input_mode_ = false;
+
+    UnregisterRawInputHotkeys();
+    KeyBinding::UnregisterConfiguredHotkeys(GetSafeHwnd(), preset_count_, hotkey_registered_,
+                                            &toggle_hotkey_registered_,
+                                            KeyBinding::HOTKEY_ID_BASE,
+                                            KeyBinding::TOGGLE_HOTKEY_ID);
+    return;
+  }
+
+  if (fullscreen_mode)
+  {
+    if (!using_raw_input_mode_)
+      DevLog::Write(_T("[Hotkey] mode changed: RawInput"));
+    using_raw_input_mode_ = true;
+
+    KeyBinding::UnregisterConfiguredHotkeys(GetSafeHwnd(), preset_count_, hotkey_registered_,
+                                            &toggle_hotkey_registered_,
+                                            KeyBinding::HOTKEY_ID_BASE,
+                                            KeyBinding::TOGGLE_HOTKEY_ID);
+    RegisterRawInputHotkeys();
+    return;
+  }
+
+  if (using_raw_input_mode_)
+    DevLog::Write(_T("[Hotkey] mode changed: RegisterHotKey"));
+  using_raw_input_mode_ = false;
+
+  UnregisterRawInputHotkeys();
   KeyBinding::RegisterConfiguredHotkeys(GetSafeHwnd(), preset_count_, hotkey_registered_,
                                         &toggle_hotkey_registered_,
                                         KeyBinding::HOTKEY_ID_BASE,
@@ -456,10 +547,193 @@ void CFilterKeySettingDlg::RegisterPresetHotkeys()
 
 void CFilterKeySettingDlg::UnregisterPresetHotkeys()
 {
+  UnregisterRawInputHotkeys();
   KeyBinding::UnregisterConfiguredHotkeys(GetSafeHwnd(), preset_count_, hotkey_registered_,
                                           &toggle_hotkey_registered_,
                                           KeyBinding::HOTKEY_ID_BASE,
                                           KeyBinding::TOGGLE_HOTKEY_ID);
+}
+
+bool CFilterKeySettingDlg::RegisterRawInputHotkeys()
+{
+  if (raw_input_registered_)
+    return true;
+
+  RAWINPUTDEVICE device = {};
+  device.usUsagePage    = 0x01;  // Generic desktop controls
+  device.usUsage        = 0x06;  // Keyboard
+  device.dwFlags        = RIDEV_INPUTSINK;
+  device.hwndTarget     = GetSafeHwnd();
+
+  if (!::RegisterRawInputDevices(&device, 1, sizeof(device)))
+    return false;
+
+  raw_input_registered_     = true;
+  raw_input_modifiers_down_ = 0;
+  raw_input_key_down_.fill(false);
+  return true;
+}
+
+void CFilterKeySettingDlg::UnregisterRawInputHotkeys()
+{
+  if (!raw_input_registered_)
+    return;
+
+  RAWINPUTDEVICE device = {};
+  device.usUsagePage    = 0x01;
+  device.usUsage        = 0x06;
+  device.dwFlags        = RIDEV_REMOVE;
+  device.hwndTarget     = nullptr;
+  ::RegisterRawInputDevices(&device, 1, sizeof(device));
+
+  raw_input_registered_     = false;
+  raw_input_modifiers_down_ = 0;
+  raw_input_key_down_.fill(false);
+}
+
+void CFilterKeySettingDlg::UpdateRawInputModifierState(UINT vk, bool key_down)
+{
+  const UINT mask = ModifierMaskForVirtualKey(vk);
+  if (mask == 0)
+    return;
+
+  if (key_down)
+    raw_input_modifiers_down_ |= mask;
+  else
+    raw_input_modifiers_down_ &= ~mask;
+}
+
+int CFilterKeySettingDlg::ResolveRawInputHotkeyId(UINT vk, UINT modifiers) const
+{
+  if (KeyBinding::IsToggleEnabled())
+  {
+    const DWORD toggle_hotkey = KeyBinding::GetToggleHotkey();
+    if (vk == KeyBinding::HotkeyVK(toggle_hotkey) &&
+        modifiers == KeyBinding::HotkeyModifiers(toggle_hotkey))
+      return KeyBinding::TOGGLE_HOTKEY_ID;
+  }
+
+  if (!KeyBinding::IsEnabled())
+    return -1;
+
+  for (int preset = PRESET_OFF; preset < preset_count_; ++preset)
+  {
+    PresetOption option(preset);
+    const DWORD  hotkey = option.getInteger(KEY_PRESET_HOTKEY, 0);
+    if (vk == KeyBinding::HotkeyVK(hotkey) &&
+        modifiers == KeyBinding::HotkeyModifiers(hotkey))
+      return KeyBinding::HOTKEY_ID_BASE + preset;
+  }
+
+  return -1;
+}
+
+bool CFilterKeySettingDlg::HandleResolvedHotkeyId(UINT hotkey_id, bool from_raw_input)
+{
+  const LPCTSTR source = from_raw_input ? _T("RawInput") : _T("RegisterHotKey");
+
+  if (hotkey_id == static_cast<UINT>(KeyBinding::TOGGLE_HOTKEY_ID))
+  {
+    const int current_preset = static_cast<int>(GLOBAL_OPTION.getInteger(KEY_LAST_PRESET));
+    const int target_preset  = KeyBinding::ResolveToggleTargetPreset(current_preset, last_on_preset_, preset_count_);
+
+    if (!PRESET_IS_VALID(target_preset))
+      return true;
+
+    DevLog::Writef(_T("[Hotkey] source=%s id=Toggle -> preset=%d"), source, target_preset);
+    ResetEditMode();
+    ActivatePreset(target_preset, FALSE, TRUE, from_raw_input ? _T("Toggle hotkey (RawInput)") : _T("Toggle hotkey"));
+    return true;
+  }
+
+  if (!KeyBinding::IsEnabled())
+    return false;
+
+  if (hotkey_id < KeyBinding::HOTKEY_ID_BASE ||
+      hotkey_id >= KeyBinding::HOTKEY_ID_BASE + static_cast<UINT>(preset_count_))
+    return false;
+
+  const int target_preset = static_cast<int>(hotkey_id - KeyBinding::HOTKEY_ID_BASE);
+  if (!PRESET_IS_VALID(target_preset))
+    return true;
+
+  DevLog::Writef(_T("[Hotkey] source=%s id=Preset(%u) -> preset=%d"), source, hotkey_id, target_preset);
+  ResetEditMode();
+  ActivatePreset(target_preset, FALSE, TRUE, from_raw_input ? _T("Preset hotkey (RawInput)") : _T("Preset hotkey"));
+  return true;
+}
+
+bool CFilterKeySettingDlg::ShowAdminHintForHotkeyIfNeeded()
+{
+  if (FilterKey::IsProcessElevatedNow())
+    return true;
+
+  if (GLOBAL_OPTION.getInteger(KEY_SKIP_ADMIN_HOTKEY_HINT, 0) != 0)
+    return true;
+
+  static constexpr int kBtnProceed = 1001;
+  static constexpr int kBtnRestart = 1002;
+  static constexpr int kBtnSkip    = 1003;
+
+  CString msg(_T("게임이 전체화면인 경우, 단축키를 사용하려면 관리자 권한으로 프로그램을 다시 실행하세요"));
+
+  TASKDIALOG_BUTTON buttons[] = {
+    { kBtnProceed, _T("이대로 진행") },
+    { kBtnRestart, _T("관리자 권한으로 재실행") },
+    { kBtnSkip, _T("다시 표시하지 않음") },
+  };
+
+  TASKDIALOGCONFIG config = {};
+  config.cbSize           = sizeof(config);
+  config.hwndParent       = GetSafeHwnd();
+  config.dwFlags          = TDF_POSITION_RELATIVE_TO_WINDOW;
+  config.pszWindowTitle   = _T("알림");
+  config.pszContent       = msg;
+  config.pButtons         = buttons;
+  config.cButtons         = _countof(buttons);
+  config.nDefaultButton   = kBtnProceed;
+
+  int pressed = 0;
+  if (SUCCEEDED(::TaskDialogIndirect(&config, &pressed, nullptr, nullptr)))
+  {
+    if (pressed == kBtnProceed)
+      return true;
+
+    if (pressed == kBtnSkip)
+    {
+      GLOBAL_OPTION.set(KEY_SKIP_ADMIN_HOTKEY_HINT, true);
+      return true;
+    }
+
+    if (pressed == kBtnRestart)
+    {
+      if (!FilterKey::RestartProgram(this, true))
+        AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
+      return false;
+    }
+
+    return false;
+  }
+
+  const int fallback = AfxMessageBox(
+      _T("게임이 전체화면인 경우, 단축키를 사용하려면 관리자 권한으로 프로그램을 다시 실행하세요\r\n\r\n"
+         "[예] 이대로 진행\r\n[아니오] 관리자 권한으로 실행\r\n[취소] 다시 표시하지 않음"),
+      MB_YESNOCANCEL | MB_ICONINFORMATION);
+  if (fallback == IDYES)
+    return true;
+  if (fallback == IDNO)
+  {
+    if (!FilterKey::RestartProgram(this, true))
+      AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
+    return false;
+  }
+  if (fallback == IDCANCEL)
+  {
+    GLOBAL_OPTION.set(KEY_SKIP_ADMIN_HOTKEY_HINT, true);
+    return true;
+  }
+
+  return false;
 }
 
 void CFilterKeySettingDlg::RefreshPresetButtonCaption(const int preset)
@@ -614,6 +888,11 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableKeybind()
     const bool previous = KeyBinding::IsEnabled();
     if (checked && !previous)
     {
+      if (!ShowAdminHintForHotkeyIfNeeded())
+      {
+        btn->SetCheck(BST_UNCHECKED);
+        return;
+      }
       GLOBAL_OPTION.set(KEY_ENABLE_KEYBIND, true);
       if (!ValidateActiveHotkeysAndAlert())
       {
@@ -634,6 +913,11 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableToggleKeybind()
     const bool previous = KeyBinding::IsToggleEnabled();
     if (checked && !previous)
     {
+      if (!ShowAdminHintForHotkeyIfNeeded())
+      {
+        btn->SetCheck(BST_UNCHECKED);
+        return;
+      }
       GLOBAL_OPTION.set(KEY_ENABLE_TOGGLE_KEYBIND, true);
       if (!ValidateActiveHotkeysAndAlert())
       {
@@ -660,6 +944,11 @@ void CFilterKeySettingDlg::OnBnClickedCheckDisableWithEsc()
 
     if (checked && !previous)
     {
+      if (!ShowAdminHintForHotkeyIfNeeded())
+      {
+        btn->SetCheck(BST_UNCHECKED);
+        return;
+      }
       if (KeyBinding::IsActiveHotkeyAssigned(VK_ESCAPE, 0, preset_count_))
       {
         AfxMessageBox(_T("안내: 현재 활성 단축키에 ESC가 포함되어 있습니다.\r\n"
@@ -1164,6 +1453,8 @@ void CFilterKeySettingDlg::UpdateInterface(const int preset)
     CString      window_title;
     CString      preset_title = option.getString(KEY_PRESET_TITLE);
     window_title.Format(_T("활성화된 프리셋 : %s"), (LPCTSTR)preset_title);
+    if (FilterKey::IsProcessElevatedNow())
+      window_title += _T(" (관리자 모드)");
     SetWindowText(window_title);
   }
 

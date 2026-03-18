@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "DialogDebug.h"
 #include "FilterKeySetting.h"
+#include "UserFilterKey.hpp"
 #include "UserPresetOSD.hpp"
 #include "afxdialogex.h"
 #include <shellapi.h>
@@ -41,6 +42,7 @@ ON_CBN_SELCHANGE(IDC_COMBO_MOVE_SENSITIVITY, &DialogDebug::OnCbnSelchangeComboMo
 ON_BN_CLICKED(IDC_CHECK_AUTO_START, &DialogDebug::OnBnClickedCheckAutoStart)
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS, &DialogDebug::OnBnClickedCheckPresetOffProcess)
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, &DialogDebug::OnBnClickedCheckPresetOffProcessRestore)
+ON_BN_CLICKED(IDC_CHECK_IF_FULL_SCREEN_GAME, &DialogDebug::OnBnClickedCheckIfFullScreenGame)
 ON_EN_KILLFOCUS(IDC_EDIT_PRESET_OFF_PROCESS, &DialogDebug::OnEnKillFocusEditPresetOffProcess)
 END_MESSAGE_MAP()
 
@@ -213,6 +215,12 @@ void DialogDebug::InitializeOptions()
       const bool checked = (GLOBAL_OPTION.getInteger(KEY_OFF_USE_WINDOWS_DEFAULT, 1) != 0);
       off_behavior->SetCheck(checked ? BST_CHECKED : BST_UNCHECKED);
     }
+
+  if (auto* full_screen = static_cast<CButton*>(GetDlgItem(IDC_CHECK_IF_FULL_SCREEN_GAME)); full_screen)
+  {
+    const bool checked = (GLOBAL_OPTION.getInteger(KEY_IF_FULL_SCREEN_GAME, 0) != 0);
+    full_screen->SetCheck(checked ? BST_CHECKED : BST_UNCHECKED);
+  }
 }
 
 void DialogDebug::NotifyOptionsChanged()
@@ -417,6 +425,53 @@ void DialogDebug::OnBnClickedCheckPresetOffProcessRestore()
   NotifyOptionsChanged();
 }
 
+void DialogDebug::OnBnClickedCheckIfFullScreenGame()
+{
+  auto* check = static_cast<CButton*>(GetDlgItem(IDC_CHECK_IF_FULL_SCREEN_GAME));
+  if (!check)
+    return;
+
+  const bool request_enable = (check->GetCheck() == BST_CHECKED);
+  const bool is_elevated    = FilterKey::IsProcessElevatedNow();
+
+  if (request_enable)
+  {
+    if (!is_elevated)
+    {
+      check->SetCheck(BST_UNCHECKED);
+
+      const int answer = AfxMessageBox(_T("해당 기능을 활성화하려면 관리자 권한으로 프로그램을 다시 실행해야 합니다.\r\n"
+                                          "프로그램을 다시 시작하시겠습니까?"),
+                                       MB_ICONQUESTION | MB_YESNO);
+      if (answer == IDYES)
+      {
+        if (!FilterKey::RestartProgram(this, true))
+          AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
+      }
+      return;
+    }
+
+    const int answer = AfxMessageBox(_T("적용 전 주의 사항\r\n"
+                                        "- 전체화면이 아닌 창모드 사용 시 해당 기능은 필요하지 않습니다.\r\n"
+                                        "- HotKey 방식보다 보안 탐지에 민감하게 받아들여질 수 있습니다.\r\n"
+                                        "- 해당 기능 사용 대신 가능한 창모드를 권장드립니다.\r\n"
+                                        "- 추후 안전성이 확인되면 해당 메세지는 제거될 예정입니다.\r\n"
+                                        "\r\n기능을 활성화 하시겠습니까?"),
+                                     MB_OKCANCEL | MB_ICONWARNING);
+    if (answer != IDOK)
+    {
+      check->SetCheck(BST_UNCHECKED);
+      DevLog::Write(_T("User cancelled enabling full screen game mode"));
+      return;
+    }
+  }
+
+  GLOBAL_OPTION.set(KEY_IF_FULL_SCREEN_GAME, static_cast<DWORD>(request_enable));
+  DevLog::Writef(_T("Option changed: fullscreen game raw input mode = %d (admin=%d)"),
+                 request_enable ? 1 : 0, is_elevated ? 1 : 0);
+  NotifyOptionsChanged();
+}
+
 void DialogDebug::OnEnKillFocusEditPresetOffProcess()
 {
   auto* edit = GetDlgItem(IDC_EDIT_PRESET_OFF_PROCESS);
@@ -548,27 +603,10 @@ void DialogDebug::OnCbnSelchangeComboDbgPresetCount()
   GLOBAL_OPTION.set(KEY_PRESET_COUNT, static_cast<DWORD>(selected_count));
   DevLog::Writef(_T("Option changed: preset_count = %d (restart accepted)"), selected_count);
 
-  TCHAR exe_path[MAX_PATH] = {};
-  if (::GetModuleFileName(nullptr, exe_path, _countof(exe_path)) == 0)
-  {
-    AfxMessageBox(_T("실행 파일 경로를 확인할 수 없어 재시작하지 못했습니다."));
-    return;
-  }
-
-  HINSTANCE launch_result = ::ShellExecute(GetSafeHwnd(), _T("open"), exe_path, nullptr, nullptr, SW_SHOWNORMAL);
-  if (reinterpret_cast<INT_PTR>(launch_result) <= 32)
+  if (!FilterKey::RestartProgram(this))
   {
     AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
     return;
-  }
-
-  if (CWnd* parent = GetParent(); parent && ::IsWindow(parent->GetSafeHwnd()))
-  {
-    parent->PostMessage(WM_CLOSE);
-  }
-  else
-  {
-    AfxGetMainWnd()->PostMessage(WM_CLOSE);
   }
 }
 

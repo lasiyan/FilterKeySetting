@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -37,6 +38,7 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg HCURSOR OnQueryDragIcon();
   afx_msg void    OnDestroy();
   afx_msg void    OnHotKey(UINT nHotKeyId, UINT nKey1, UINT nKey2);
+  afx_msg LRESULT OnRawInput(WPARAM wParam, LPARAM lParam);
   afx_msg void    OnSize(UINT nType, int cx, int cy);
   afx_msg void    OnTimer(UINT_PTR nIDEvent);
   afx_msg LRESULT OnTrayIcon(WPARAM wParam, LPARAM lParam);
@@ -102,6 +104,12 @@ class CFilterKeySettingDlg : public CDialogEx
   // Hotkey registration
   void RegisterPresetHotkeys();
   void UnregisterPresetHotkeys();
+  bool RegisterRawInputHotkeys();
+  void UnregisterRawInputHotkeys();
+  void UpdateRawInputModifierState(UINT vk, bool key_down);
+  int  ResolveRawInputHotkeyId(UINT vk, UINT modifiers) const;
+  bool HandleResolvedHotkeyId(UINT hotkey_id, bool from_raw_input);
+  bool ShowAdminHintForHotkeyIfNeeded();
 
   // Layout / init
   void InitializePresetCount();
@@ -135,8 +143,12 @@ class CFilterKeySettingDlg : public CDialogEx
   bool           tray_icon_added_ = false;
 
   // Hotkey registration state
-  bool hotkey_registered_[PRESET_MAX_COUNT] = { false };
-  bool toggle_hotkey_registered_            = false;
+  bool                  hotkey_registered_[PRESET_MAX_COUNT] = { false };
+  bool                  toggle_hotkey_registered_            = false;
+  bool                  raw_input_registered_                = false;
+  bool                  using_raw_input_mode_                = false;
+  UINT                  raw_input_modifiers_down_            = 0;
+  std::array<bool, 256> raw_input_key_down_                  = {};
 
   // Dynamic UI
   std::vector<std::unique_ptr<CButton>> preset_buttons_;

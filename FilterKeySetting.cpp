@@ -143,7 +143,10 @@ static BOOL ActivateExistingInstance()
 
 BOOL CFilterKeySettingApp::InitInstance()
 {
-  if (ActivateExistingInstance())
+  const CString cmd_line               = ::GetCommandLine();
+  const bool    bypass_single_instance = (cmd_line.Find(_T("/restart-bypass-single-instance")) >= 0);
+
+  if (!bypass_single_instance && ActivateExistingInstance())
     return FALSE;
 
   // InitCommonControlsEx() is required on Windows XP if an application
