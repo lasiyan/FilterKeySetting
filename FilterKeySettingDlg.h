@@ -43,6 +43,7 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg LRESULT OnMouseTrackerTriggered(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnDebugDialogClosed(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnDebugOptionsChanged(WPARAM wParam, LPARAM lParam);
+  afx_msg LRESULT OnActivateExisting(WPARAM wParam, LPARAM lParam);
   BOOL            PreTranslateMessage(MSG* pMsg) override;
   DECLARE_MESSAGE_MAP()
 
@@ -120,13 +121,16 @@ class CFilterKeySettingDlg : public CDialogEx
   int last_on_preset_     = 1;
 
   // Message IDs and timer IDs
+ public:
   static constexpr UINT     WM_TRAYICON_MSG             = WM_APP + 1;
+  static constexpr UINT     WM_ACTIVATE_EXISTING_INST   = WM_APP + 100;
   static constexpr UINT_PTR TIMER_BG_ESC_WATCH          = 0x12F1;
   static constexpr UINT_PTR TIMER_PROCESS_WATCHER       = 0x12F2;
   static constexpr UINT     TRAY_ICON_ID                = 1;
   static constexpr UINT     dynamic_preset_button_base_ = 2000;
 
   // Tray icon
+ private:
   NOTIFYICONDATA tray_icon_data_  = {};
   bool           tray_icon_added_ = false;
 

@@ -52,6 +52,7 @@ ON_MESSAGE(WM_TRAYICON_MSG, &CFilterKeySettingDlg::OnTrayIcon)
 ON_MESSAGE(WM_MOUSE_TRACKER_TRIGGERED, &CFilterKeySettingDlg::OnMouseTrackerTriggered)
 ON_MESSAGE(WM_DEV_DEBUG_CLOSED, &CFilterKeySettingDlg::OnDebugDialogClosed)
 ON_MESSAGE(WM_DEV_DEBUG_OPTIONS_CHANGED, &CFilterKeySettingDlg::OnDebugOptionsChanged)
+ON_MESSAGE(CFilterKeySettingDlg::WM_ACTIVATE_EXISTING_INST, &CFilterKeySettingDlg::OnActivateExisting)
 ON_COMMAND_RANGE(CFilterKeySettingDlg::dynamic_preset_button_base_,
                  CFilterKeySettingDlg::dynamic_preset_button_base_ + PRESET_MAX_COUNT - 1,
                  &CFilterKeySettingDlg::OnCommandPresetButton)
@@ -351,6 +352,24 @@ LRESULT CFilterKeySettingDlg::OnMouseTrackerTriggered(WPARAM wParam, LPARAM lPar
   ResetEditMode();
   ActivatePreset(PRESET_OFF, FALSE, TRUE,
                  trigger == MouseTrackerTrigger::MoveDistance ? _T("Mouse Move tracker") : _T("Mouse D-Click tracker"));
+  return 0;
+}
+
+LRESULT CFilterKeySettingDlg::OnActivateExisting(WPARAM wParam, LPARAM lParam)
+{
+  UNREFERENCED_PARAMETER(wParam);
+  UNREFERENCED_PARAMETER(lParam);
+
+  if (tray_icon_added_)
+  {
+    RestoreFromTray();
+  }
+  else
+  {
+    ShowWindow(SW_RESTORE);
+    SetForegroundWindow();
+  }
+
   return 0;
 }
 

@@ -8,6 +8,7 @@
 #include "FilterKeySetting.h"
 #include "FilterKeySettingDlg.h"
 #include "UserFilterKey.hpp"
+#include <tlhelp32.h>
 // clang-format on
 
 #ifdef _DEBUG
@@ -37,8 +38,114 @@ CFilterKeySettingApp theApp;
 
 // CFilterKeySettingApp initialization
 
+struct ExistingWindowSearchContext
+{
+  DWORD pid             = 0;
+  HWND  dialog_window   = nullptr;
+  HWND  fallback_window = nullptr;
+};
+
+static BOOL CALLBACK EnumWindowsFindByPID(HWND hwnd, LPARAM lParam)
+{
+  auto* ctx     = reinterpret_cast<ExistingWindowSearchContext*>(lParam);
+  DWORD wnd_pid = 0;
+  ::GetWindowThreadProcessId(hwnd, &wnd_pid);
+
+  if (wnd_pid != ctx->pid || ::GetWindow(hwnd, GW_OWNER) != nullptr)
+    return TRUE;
+
+  if (ctx->fallback_window == nullptr)
+    ctx->fallback_window = hwnd;
+
+  TCHAR class_name[64] = {};
+  ::GetClassName(hwnd, class_name, _countof(class_name));
+  if (_tcscmp(class_name, _T("#32770")) == 0)
+  {
+    // Main dialog window in this app is class #32770.
+    ctx->dialog_window = hwnd;
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static BOOL ActivateExistingInstance()
+{
+  TCHAR current_path[MAX_PATH] = {};
+  if (::GetModuleFileName(nullptr, current_path, MAX_PATH) == 0)
+    return FALSE;
+
+  CString current_name(current_path);
+  int     pos = current_name.ReverseFind(_T('\\'));
+  if (pos >= 0)
+    current_name = current_name.Mid(pos + 1);
+
+  const DWORD current_pid = ::GetCurrentProcessId();
+
+  HANDLE snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snapshot == INVALID_HANDLE_VALUE)
+    return FALSE;
+
+  PROCESSENTRY32 entry = {};
+  entry.dwSize         = sizeof(entry);
+  DWORD found_pid      = 0;
+
+  if (::Process32First(snapshot, &entry))
+  {
+    do
+    {
+      if (entry.th32ProcessID != current_pid &&
+          current_name.CompareNoCase(entry.szExeFile) == 0)
+      {
+        found_pid = entry.th32ProcessID;
+        break;
+      }
+    } while (::Process32Next(snapshot, &entry));
+  }
+  ::CloseHandle(snapshot);
+
+  if (found_pid == 0)
+    return FALSE;
+
+  // Let the already-running instance take foreground focus.
+  ::AllowSetForegroundWindow(found_pid);
+
+  ExistingWindowSearchContext search = {};
+  search.pid                         = found_pid;
+  ::EnumWindows(EnumWindowsFindByPID, reinterpret_cast<LPARAM>(&search));
+
+  const HWND target_window = search.dialog_window ? search.dialog_window : search.fallback_window;
+
+  if (target_window)
+  {
+    DWORD_PTR  message_result = 0;
+    const auto send_ok        = ::SendMessageTimeout(
+        target_window,
+        CFilterKeySettingDlg::WM_ACTIVATE_EXISTING_INST,
+        0, 0,
+        SMTO_ABORTIFHUNG | SMTO_NORMAL,
+        1000,
+        &message_result);
+
+    // Fallback path for cases where custom app messages are blocked
+    // (e.g. integrity level mismatch) or target window is hidden.
+    if (send_ok == 0)
+    {
+      ::ShowWindowAsync(target_window, SW_SHOW);
+      ::ShowWindowAsync(target_window, SW_RESTORE);
+      ::BringWindowToTop(target_window);
+      ::SetForegroundWindow(target_window);
+    }
+  }
+
+  return TRUE;
+}
+
 BOOL CFilterKeySettingApp::InitInstance()
 {
+  if (ActivateExistingInstance())
+    return FALSE;
+
   // InitCommonControlsEx() is required on Windows XP if an application
   // manifest specifies use of ComCtl32.dll version 6 or later to enable
   // visual styles.  Otherwise, any window creation will fail.
