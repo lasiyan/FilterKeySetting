@@ -14,7 +14,7 @@ class PresetOSDWindow : public CWnd
       return true;
 
     CString class_name = AfxRegisterWndClass(0);
-    return CreateEx(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+    return CreateEx(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
                     class_name,
                     _T("PresetOSD"),
                     WS_POPUP,
@@ -122,6 +122,13 @@ class PresetOSDWindow : public CWnd
     CWnd::OnTimer(id);
   }
 
+  afx_msg LRESULT OnNcHitTest(CPoint point)
+  {
+    UNREFERENCED_PARAMETER(point);
+    // Pass all mouse interaction through to windows behind OSD.
+    return HTTRANSPARENT;
+  }
+
   DECLARE_MESSAGE_MAP()
 
  private:
@@ -205,6 +212,7 @@ class PresetOSDWindow : public CWnd
 BEGIN_MESSAGE_MAP(PresetOSDWindow, CWnd)
 ON_WM_PAINT()
 ON_WM_TIMER()
+ON_WM_NCHITTEST()
 END_MESSAGE_MAP()
 
 PresetOSDWindow& OSDWindow()
