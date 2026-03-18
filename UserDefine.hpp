@@ -53,9 +53,9 @@
 #define CUSTOM_FILTER_FLAG   (35)
 
 // Preset value validation limits
-static constexpr DWORD MAX_ACCEPT_DELAY = 2000;
-static constexpr DWORD MAX_REPEAT_DELAY = 2000;
-static constexpr DWORD MAX_REPEAT_RATE  = 1000;
+static constexpr DWORD MAX_ACCEPT_DELAY = 10000;
+static constexpr DWORD MAX_REPEAT_DELAY = 10000;
+static constexpr DWORD MAX_REPEAT_RATE  = 10000;
 
 // Preset constants
 static constexpr int PRESET_OFF       = 0;
