@@ -35,7 +35,7 @@ Windows 환경에서 필터키(Filter Keys) 값을 프리셋으로 빠르게 전
 5. 프로그램을 다시 실행합니다.
 
 ### 메이플스토리 전체화면 사용자
-- [이 문서를 참고하세요](docs/exclusive-fullscreen)
+- [이 문서를 참고하세요](docs/exclusive-fullscreen.md)
 
 ---
 
