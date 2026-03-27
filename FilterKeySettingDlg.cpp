@@ -1,4 +1,4 @@
-﻿
+
 // FilterKeySettingDlg.cpp : implementation file
 //
 
@@ -106,6 +106,12 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   //  when the application's main window is not a dialog
   SetIcon(m_hIcon, TRUE);   // Set big icon
   SetIcon(m_hIcon, FALSE);  // Set small icon
+
+  if (!ShowAdminHintForHotkeyIfNeeded())
+  {
+    PostMessage(WM_CLOSE);
+    return TRUE;
+  }
 
   FilterKey::BackupCurrentFilterKeysToOption();
 
@@ -675,7 +681,7 @@ bool CFilterKeySettingDlg::ShowAdminHintForHotkeyIfNeeded()
   static constexpr int kBtnRestart = 1002;
   static constexpr int kBtnSkip    = 1003;
 
-  CString msg(_T("게임이 전체화면인 경우, 단축키를 사용하려면 관리자 권한으로 프로그램을 다시 실행하세요"));
+  CString msg(_T("프로그램이 관리자 권한이 아닌 경우, 전체화면과 같은 환경에서 단축키, 마우스와 같은 일부 기능이 제한될 수 있습니다"));
 
   TASKDIALOG_BUTTON buttons[] = {
     { kBtnProceed, _T("이대로 진행") },
@@ -714,26 +720,7 @@ bool CFilterKeySettingDlg::ShowAdminHintForHotkeyIfNeeded()
 
     return false;
   }
-
-  const int fallback = AfxMessageBox(
-      _T("게임이 전체화면인 경우, 단축키를 사용하려면 관리자 권한으로 프로그램을 다시 실행하세요\r\n\r\n"
-         "[예] 이대로 진행\r\n[아니오] 관리자 권한으로 실행\r\n[취소] 다시 표시하지 않음"),
-      MB_YESNOCANCEL | MB_ICONINFORMATION);
-  if (fallback == IDYES)
-    return true;
-  if (fallback == IDNO)
-  {
-    if (!FilterKey::RestartProgram(this, true))
-      AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
-    return false;
-  }
-  if (fallback == IDCANCEL)
-  {
-    GLOBAL_OPTION.set(KEY_SKIP_ADMIN_HOTKEY_HINT, true);
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 void CFilterKeySettingDlg::RefreshPresetButtonCaption(const int preset)
@@ -888,11 +875,6 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableKeybind()
     const bool previous = KeyBinding::IsEnabled();
     if (checked && !previous)
     {
-      if (!ShowAdminHintForHotkeyIfNeeded())
-      {
-        btn->SetCheck(BST_UNCHECKED);
-        return;
-      }
       GLOBAL_OPTION.set(KEY_ENABLE_KEYBIND, true);
       if (!ValidateActiveHotkeysAndAlert())
       {
@@ -913,11 +895,6 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableToggleKeybind()
     const bool previous = KeyBinding::IsToggleEnabled();
     if (checked && !previous)
     {
-      if (!ShowAdminHintForHotkeyIfNeeded())
-      {
-        btn->SetCheck(BST_UNCHECKED);
-        return;
-      }
       GLOBAL_OPTION.set(KEY_ENABLE_TOGGLE_KEYBIND, true);
       if (!ValidateActiveHotkeysAndAlert())
       {
@@ -944,11 +921,6 @@ void CFilterKeySettingDlg::OnBnClickedCheckDisableWithEsc()
 
     if (checked && !previous)
     {
-      if (!ShowAdminHintForHotkeyIfNeeded())
-      {
-        btn->SetCheck(BST_UNCHECKED);
-        return;
-      }
       if (KeyBinding::IsActiveHotkeyAssigned(VK_ESCAPE, 0, preset_count_))
       {
         AfxMessageBox(_T("안내: 현재 활성 단축키에 ESC가 포함되어 있습니다.\r\n"
