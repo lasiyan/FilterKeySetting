@@ -1,5 +1,7 @@
 # Filter Key Setting
-윈도우 환경에서 필터키 설정을 간편하게 도와줍니다 !
+윈도우 환경에서 필터키 설정을 간편하게 도와줍니다
+
+> 문의 사항은 GitHub Issue 또는 베라서버 `미테렌`으로 문의 바랍니다.
 
 ![image](https://github.com/lasiyan/Filter-Key-Setting/assets/135001826/90bb1745-7d3c-4c70-a97f-af6fe7774a53)
 <!--<img src="https://github.com/lasiyan/Filter-Key-Setting/assets/135001826/90bb1745-7d3c-4c70-a97f-af6fe7774a53" align="center">-->
