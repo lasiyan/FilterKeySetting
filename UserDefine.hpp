@@ -22,7 +22,6 @@
 #define KEY_PROCESS_OFF_NAME              (_T("process_off_name"))
 #define KEY_PROCESS_OFF_RESTORE           (_T("process_off_restore"))
 #define KEY_IF_FULL_SCREEN_GAME           (_T("if_full_screen_game"))
-#define KEY_SKIP_ADMIN_HOTKEY_HINT        (_T("skip_admin_hotkey_hint"))
 #define KEY_MUTE_SOUND                    (_T("mute_sound"))
 #define KEY_SYNC_FILTERKEY                (_T("sync_filterkey"))
 #define KEY_ENABLE_PRESET_OSD             (_T("enable_preset_osd"))

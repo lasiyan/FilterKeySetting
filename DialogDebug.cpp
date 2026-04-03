@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "DialogDebug.h"
 #include "FilterKeySetting.h"
+#include "UserAdminGuard.hpp"
 #include "UserFilterKey.hpp"
 #include "UserPresetOSD.hpp"
 #include "afxdialogex.h"
@@ -232,8 +233,20 @@ void DialogDebug::NotifyOptionsChanged()
 
 void DialogDebug::OnBnClickedCheckDbgMoveTracker()
 {
-  auto*      button  = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DBG_MOVE_TRACKER));
-  const bool checked = (button && button->GetCheck() == BST_CHECKED);
+  auto*      button   = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DBG_MOVE_TRACKER));
+  const bool checked  = (button && button->GetCheck() == BST_CHECKED);
+  const bool previous = (GLOBAL_OPTION.getInteger(KEY_ENABLE_MOUSE_MOVE_TRACKER, 0) != 0);
+
+  if (button && checked && !previous)
+  {
+    const CString option_key = KEY_ENABLE_MOUSE_MOVE_TRACKER;
+    const auto    prompt     = AdminGuard::PromptAdminRestartIfNeeded(this, &option_key);
+    if (prompt != AdminGuard::PromptResult::Proceed)
+    {
+      button->SetCheck(BST_UNCHECKED);
+      return;
+    }
+  }
 
   GLOBAL_OPTION.set(KEY_ENABLE_MOUSE_MOVE_TRACKER, static_cast<DWORD>(checked));
 
@@ -406,8 +419,20 @@ void DialogDebug::UpdateProcessOffControlStates()
 
 void DialogDebug::OnBnClickedCheckPresetOffProcess()
 {
-  auto*      check   = static_cast<CButton*>(GetDlgItem(IDC_CHECK_PRESET_OFF_PROCESS));
-  const bool checked = (check && check->GetCheck() == BST_CHECKED);
+  auto*      check    = static_cast<CButton*>(GetDlgItem(IDC_CHECK_PRESET_OFF_PROCESS));
+  const bool checked  = (check && check->GetCheck() == BST_CHECKED);
+  const bool previous = (GLOBAL_OPTION.getInteger(KEY_PROCESS_OFF_ENABLED, 0) != 0);
+
+  if (check && checked && !previous)
+  {
+    const CString option_key = KEY_PROCESS_OFF_ENABLED;
+    const auto    prompt     = AdminGuard::PromptAdminRestartIfNeeded(this, &option_key);
+    if (prompt != AdminGuard::PromptResult::Proceed)
+    {
+      check->SetCheck(BST_UNCHECKED);
+      return;
+    }
+  }
 
   GLOBAL_OPTION.set(KEY_PROCESS_OFF_ENABLED, static_cast<DWORD>(checked));
   UpdateProcessOffControlStates();
@@ -432,25 +457,21 @@ void DialogDebug::OnBnClickedCheckIfFullScreenGame()
     return;
 
   const bool request_enable = (check->GetCheck() == BST_CHECKED);
-  const bool is_elevated    = FilterKey::IsProcessElevatedNow();
+  const bool previous       = (GLOBAL_OPTION.getInteger(KEY_IF_FULL_SCREEN_GAME, 0) != 0);
+
+  if (request_enable && !previous)
+  {
+    const CString option_key = KEY_IF_FULL_SCREEN_GAME;
+    const auto    prompt     = AdminGuard::PromptAdminRestartIfNeeded(this, &option_key);
+    if (prompt != AdminGuard::PromptResult::Proceed)
+    {
+      check->SetCheck(BST_UNCHECKED);
+      return;
+    }
+  }
 
   if (request_enable)
   {
-    if (!is_elevated)
-    {
-      check->SetCheck(BST_UNCHECKED);
-
-      const int answer = AfxMessageBox(_T("해당 기능을 활성화하려면 관리자 권한으로 프로그램을 다시 실행해야 합니다.\r\n"
-                                          "프로그램을 다시 시작하시겠습니까?"),
-                                       MB_ICONQUESTION | MB_YESNO);
-      if (answer == IDYES)
-      {
-        if (!FilterKey::RestartProgram(this, true))
-          AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
-      }
-      return;
-    }
-
     const int answer = AfxMessageBox(_T("적용 전 주의 사항\r\n"
                                         "- 전체화면이 아닌 창모드 사용 시 해당 기능은 필요하지 않습니다.\r\n"
                                         "- HotKey 방식보다 보안 탐지에 민감하게 받아들여질 수 있습니다.\r\n"
@@ -467,6 +488,7 @@ void DialogDebug::OnBnClickedCheckIfFullScreenGame()
   }
 
   GLOBAL_OPTION.set(KEY_IF_FULL_SCREEN_GAME, static_cast<DWORD>(request_enable));
+  const bool is_elevated = FilterKey::IsProcessElevatedNow();
   DevLog::Writef(_T("Option changed: fullscreen game raw input mode = %d (admin=%d)"),
                  request_enable ? 1 : 0, is_elevated ? 1 : 0);
   NotifyOptionsChanged();

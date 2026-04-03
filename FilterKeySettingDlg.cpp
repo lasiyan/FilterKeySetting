@@ -16,6 +16,7 @@
 #include "UserFilterKey.hpp"
 #include "UserKeyBinding.hpp"
 #include "UserPlaySound.hpp"
+#include "UserAdminGuard.hpp"
 #include "UserPresetOSD.hpp"
 #include "UserPresetService.hpp"
 #include <algorithm>
@@ -106,6 +107,9 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   //  when the application's main window is not a dialog
   SetIcon(m_hIcon, TRUE);   // Set big icon
   SetIcon(m_hIcon, FALSE);  // Set small icon
+
+  if (!EnsureAdminGuardOnStartup())
+    return FALSE;
 
   FilterKey::BackupCurrentFilterKeysToOption();
 
@@ -663,77 +667,24 @@ bool CFilterKeySettingDlg::HandleResolvedHotkeyId(UINT hotkey_id, bool from_raw_
   return true;
 }
 
-bool CFilterKeySettingDlg::ShowAdminHintForHotkeyIfNeeded()
+bool CFilterKeySettingDlg::EnsureAdminGuardForOptionEnable(const CString& option_key,
+                                                           bool           request_enable,
+                                                           bool           previous_enabled)
 {
-  if (FilterKey::IsProcessElevatedNow())
+  if (!request_enable || previous_enabled)
     return true;
 
-  if (GLOBAL_OPTION.getInteger(KEY_SKIP_ADMIN_HOTKEY_HINT, 0) != 0)
+  const auto result = AdminGuard::PromptAdminRestartIfNeeded(this, &option_key);
+  if (result == AdminGuard::PromptResult::Proceed)
     return true;
-
-  static constexpr int kBtnProceed = 1001;
-  static constexpr int kBtnRestart = 1002;
-  static constexpr int kBtnSkip    = 1003;
-
-  CString msg(_T("게임이 전체화면인 경우, 단축키를 사용하려면 관리자 권한으로 프로그램을 다시 실행하세요"));
-
-  TASKDIALOG_BUTTON buttons[] = {
-    { kBtnProceed, _T("이대로 진행") },
-    { kBtnRestart, _T("관리자 권한으로 재실행") },
-    { kBtnSkip, _T("다시 표시하지 않음") },
-  };
-
-  TASKDIALOGCONFIG config = {};
-  config.cbSize           = sizeof(config);
-  config.hwndParent       = GetSafeHwnd();
-  config.dwFlags          = TDF_POSITION_RELATIVE_TO_WINDOW;
-  config.pszWindowTitle   = _T("알림");
-  config.pszContent       = msg;
-  config.pButtons         = buttons;
-  config.cButtons         = _countof(buttons);
-  config.nDefaultButton   = kBtnProceed;
-
-  int pressed = 0;
-  if (SUCCEEDED(::TaskDialogIndirect(&config, &pressed, nullptr, nullptr)))
-  {
-    if (pressed == kBtnProceed)
-      return true;
-
-    if (pressed == kBtnSkip)
-    {
-      GLOBAL_OPTION.set(KEY_SKIP_ADMIN_HOTKEY_HINT, true);
-      return true;
-    }
-
-    if (pressed == kBtnRestart)
-    {
-      if (!FilterKey::RestartProgram(this, true))
-        AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
-      return false;
-    }
-
-    return false;
-  }
-
-  const int fallback = AfxMessageBox(
-      _T("게임이 전체화면인 경우, 단축키를 사용하려면 관리자 권한으로 프로그램을 다시 실행하세요\r\n\r\n"
-         "[예] 이대로 진행\r\n[아니오] 관리자 권한으로 실행\r\n[취소] 다시 표시하지 않음"),
-      MB_YESNOCANCEL | MB_ICONINFORMATION);
-  if (fallback == IDYES)
-    return true;
-  if (fallback == IDNO)
-  {
-    if (!FilterKey::RestartProgram(this, true))
-      AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
-    return false;
-  }
-  if (fallback == IDCANCEL)
-  {
-    GLOBAL_OPTION.set(KEY_SKIP_ADMIN_HOTKEY_HINT, true);
-    return true;
-  }
 
   return false;
+}
+
+bool CFilterKeySettingDlg::EnsureAdminGuardOnStartup()
+{
+  const auto result = AdminGuard::PromptAdminRestartIfNeeded(this);
+  return (result != AdminGuard::PromptResult::RestartRequested);
 }
 
 void CFilterKeySettingDlg::RefreshPresetButtonCaption(const int preset)
@@ -886,13 +837,14 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableKeybind()
   {
     const bool checked  = (btn->GetCheck() == BST_CHECKED);
     const bool previous = KeyBinding::IsEnabled();
+    if (!EnsureAdminGuardForOptionEnable(KEY_ENABLE_KEYBIND, checked, previous))
+    {
+      btn->SetCheck(BST_UNCHECKED);
+      return;
+    }
+
     if (checked && !previous)
     {
-      if (!ShowAdminHintForHotkeyIfNeeded())
-      {
-        btn->SetCheck(BST_UNCHECKED);
-        return;
-      }
       GLOBAL_OPTION.set(KEY_ENABLE_KEYBIND, true);
       if (!ValidateActiveHotkeysAndAlert())
       {
@@ -911,13 +863,14 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableToggleKeybind()
   {
     const bool checked  = (btn->GetCheck() == BST_CHECKED);
     const bool previous = KeyBinding::IsToggleEnabled();
+    if (!EnsureAdminGuardForOptionEnable(KEY_ENABLE_TOGGLE_KEYBIND, checked, previous))
+    {
+      btn->SetCheck(BST_UNCHECKED);
+      return;
+    }
+
     if (checked && !previous)
     {
-      if (!ShowAdminHintForHotkeyIfNeeded())
-      {
-        btn->SetCheck(BST_UNCHECKED);
-        return;
-      }
       GLOBAL_OPTION.set(KEY_ENABLE_TOGGLE_KEYBIND, true);
       if (!ValidateActiveHotkeysAndAlert())
       {
@@ -932,6 +885,17 @@ void CFilterKeySettingDlg::OnBnClickedCheckEnableToggleKeybind()
 
 void CFilterKeySettingDlg::OnBnClickedCheckSetMouseDblclickTracker()
 {
+  if (auto btn = static_cast<CButton*>(GetDlgItem(IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER)); btn)
+  {
+    const bool checked  = (btn->GetCheck() == BST_CHECKED);
+    const bool previous = (GLOBAL_OPTION.getInteger(KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, 0) != 0);
+    if (!EnsureAdminGuardForOptionEnable(KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, checked, previous))
+    {
+      btn->SetCheck(BST_UNCHECKED);
+      return;
+    }
+  }
+
   UpdateOption();
 }
 
@@ -942,13 +906,14 @@ void CFilterKeySettingDlg::OnBnClickedCheckDisableWithEsc()
     const bool checked  = (btn->GetCheck() == BST_CHECKED);
     const bool previous = (GLOBAL_OPTION.getInteger(KEY_DISABLE_WITH_ESC, 0) != 0);
 
+    if (!EnsureAdminGuardForOptionEnable(KEY_DISABLE_WITH_ESC, checked, previous))
+    {
+      btn->SetCheck(BST_UNCHECKED);
+      return;
+    }
+
     if (checked && !previous)
     {
-      if (!ShowAdminHintForHotkeyIfNeeded())
-      {
-        btn->SetCheck(BST_UNCHECKED);
-        return;
-      }
       if (KeyBinding::IsActiveHotkeyAssigned(VK_ESCAPE, 0, preset_count_))
       {
         AfxMessageBox(_T("안내: 현재 활성 단축키에 ESC가 포함되어 있습니다.\r\n"
@@ -1391,8 +1356,7 @@ void CFilterKeySettingDlg::TickProcessWatcher()
   process_watch_last_fg_ = fg;
 
   CString fg_name     = GetForegroundProcessName();
-  bool    now_focused = (!fg_name.IsEmpty() &&
-                      fg_name.CompareNoCase(process_watch_target_) == 0);
+  bool    now_focused = (!fg_name.IsEmpty() && fg_name.CompareNoCase(process_watch_target_) == 0);
 
   if (process_watch_was_focused_ && !now_focused)
   {

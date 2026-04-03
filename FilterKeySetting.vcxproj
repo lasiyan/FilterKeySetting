@@ -227,6 +227,7 @@ powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\Generate-Rel
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="UserFilterKey.hpp" />
+    <ClInclude Include="UserAdminGuard.hpp" />
     <ClInclude Include="UserDefine.hpp" />
     <ClInclude Include="UserDevLog.hpp" />
     <ClInclude Include="UserKeyBinding.hpp" />
@@ -242,6 +243,7 @@ powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\Generate-Rel
     <ClCompile Include="DialogRename.cpp" />
     <ClCompile Include="FilterKeySetting.cpp" />
     <ClCompile Include="FilterKeySettingDlg.cpp" />
+    <ClCompile Include="UserAdminGuard.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

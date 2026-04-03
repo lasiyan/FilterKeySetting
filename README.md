@@ -1,5 +1,7 @@
-# Filter Key Setting
+﻿# Filter Key Setting
 Windows 환경에서 필터키(Filter Keys) 값을 프리셋으로 빠르게 전환/관리하는 도구입니다.
+
+> 문의 사항은 GitHub Issue 또는 베라서버 `미테렌`으로 문의 바랍니다.
 
 <img src="https://github.com/user-attachments/assets/428e9743-2286-4196-8d91-513d7ee78282" width="50%">
 

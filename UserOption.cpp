@@ -20,14 +20,13 @@ bool InitializeOptionValues()
     res &= GLOBAL_OPTION.setInit(KEY_ENABLE_KEYBIND, false);
     res &= GLOBAL_OPTION.setInit(KEY_ENABLE_TOGGLE_KEYBIND, false);
     res &= GLOBAL_OPTION.setInit(KEY_TOGGLE_HOTKEY, 0);
-    res &= GLOBAL_OPTION.setInit(KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, true);
+    res &= GLOBAL_OPTION.setInit(KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, false);
     res &= GLOBAL_OPTION.setInit(KEY_ENABLE_MOUSE_MOVE_TRACKER, false);
     res &= GLOBAL_OPTION.setInit(KEY_DISABLE_WITH_ESC, false);
     res &= GLOBAL_OPTION.setInit(KEY_PROCESS_OFF_ENABLED, false);
     res &= GLOBAL_OPTION.setInit(KEY_PROCESS_OFF_NAME, CString());
     res &= GLOBAL_OPTION.setInit(KEY_PROCESS_OFF_RESTORE, false);
     res &= GLOBAL_OPTION.setInit(KEY_IF_FULL_SCREEN_GAME, false);
-    res &= GLOBAL_OPTION.setInit(KEY_SKIP_ADMIN_HOTKEY_HINT, false);
     res &= GLOBAL_OPTION.setInit(KEY_MUTE_SOUND, false);
     res &= GLOBAL_OPTION.setInit(KEY_SYNC_FILTERKEY, false);
     res &= GLOBAL_OPTION.setInit(KEY_ENABLE_PRESET_OSD, false);
