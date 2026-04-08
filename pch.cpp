@@ -4,3 +4,17 @@
 
 // 미리 컴파일된 헤더를 사용하는 경우 컴파일이 성공하려면 이 소스 파일이
 // 필요합니다.
+
+const CString& GetAppName()
+{
+  static const CString app_name = []() {
+    CString name;
+
+    if (const auto* app = AfxGetApp(); app && app->m_pszAppName)
+      name = app->m_pszAppName;
+
+    return name.IsEmpty() ? CString(_T("FilterKeySetting")) : name;
+  }();
+
+  return app_name;
+}

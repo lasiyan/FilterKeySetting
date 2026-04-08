@@ -10,4 +10,7 @@
 // 여기에 미리 컴파일하려는 헤더 추가
 #include "framework.h"
 
+// 전역 함수 : 프로그램 이름 가져오기
+extern const CString& GetAppName();
+
 #endif  // PCH_H

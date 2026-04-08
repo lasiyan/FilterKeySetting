@@ -318,8 +318,7 @@ void DialogDebug::InitializeAutoStart()
   if (!check)
     return;
 
-  static constexpr LPCTSTR kRunPath  = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-  static constexpr LPCTSTR kRunValue = _T("FilterKeySetting");
+  static constexpr LPCTSTR kRunPath = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 
   HKEY hKey = nullptr;
   if (::RegOpenKeyEx(HKEY_CURRENT_USER, kRunPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
@@ -332,7 +331,7 @@ void DialogDebug::InitializeAutoStart()
   TCHAR reg_path[MAX_PATH] = {};
   DWORD size               = sizeof(reg_path);
   DWORD type               = 0;
-  LONG  result             = ::RegQueryValueEx(hKey, kRunValue, nullptr, &type, reinterpret_cast<LPBYTE>(reg_path), &size);
+  LONG  result             = ::RegQueryValueEx(hKey, GetAppName(), nullptr, &type, reinterpret_cast<LPBYTE>(reg_path), &size);
   ::RegCloseKey(hKey);
 
   TCHAR exe_path[MAX_PATH] = {};
@@ -358,8 +357,7 @@ void DialogDebug::OnBnClickedCheckAutoStart()
   auto*      check   = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTO_START));
   const bool enabled = (check && check->GetCheck() == BST_CHECKED);
 
-  static constexpr LPCTSTR kRunPath  = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-  static constexpr LPCTSTR kRunValue = _T("FilterKeySetting");
+  static constexpr LPCTSTR kRunPath = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 
   HKEY hKey = nullptr;
   if (::RegOpenKeyEx(HKEY_CURRENT_USER, kRunPath, 0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
@@ -372,14 +370,14 @@ void DialogDebug::OnBnClickedCheckAutoStart()
   {
     TCHAR exe_path[MAX_PATH] = {};
     ::GetModuleFileName(nullptr, exe_path, MAX_PATH);
-    LONG res = ::RegSetValueEx(hKey, kRunValue, 0, REG_SZ,
+    LONG res = ::RegSetValueEx(hKey, GetAppName(), 0, REG_SZ,
                                reinterpret_cast<const BYTE*>(exe_path),
                                static_cast<DWORD>((_tcslen(exe_path) + 1) * sizeof(TCHAR)));
     DevLog::Writef(_T("[AutoStart] Registered: result=%ld, path=%s"), res, exe_path);
   }
   else
   {
-    LONG res = ::RegDeleteValue(hKey, kRunValue);
+    LONG res = ::RegDeleteValue(hKey, GetAppName());
     DevLog::Writef(_T("[AutoStart] Unregistered: result=%ld"), res);
   }
 

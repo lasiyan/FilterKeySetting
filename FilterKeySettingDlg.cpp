@@ -46,6 +46,60 @@ UINT ModifierMaskForVirtualKey(UINT vk)
       return 0;
   }
 }
+
+bool ReadDwordFromEdit(CDialogEx* dlg, int control_id, DWORD* out)
+{
+  if (!dlg || !out)
+    return false;
+
+  BOOL ok = FALSE;
+  UINT u  = dlg->GetDlgItemInt(control_id, &ok, FALSE);
+  if (!ok)
+  {
+    AfxMessageBox(_T("숫자 형식이 올바르지 않습니다."));
+    if (auto* ctrl = dlg->GetDlgItem(control_id); ctrl)
+      ctrl->SetFocus();
+    return false;
+  }
+
+  *out = static_cast<DWORD>(u);
+  return true;
+}
+
+bool ReadPresetValuesFromEdits(CDialogEx* dlg, PresetValues* out_values)
+{
+  if (!out_values)
+    return false;
+
+  PresetValues values = {};
+  if (!ReadDwordFromEdit(dlg, IDC_EDIT_ACCEPT_DELAY, &values.accept_delay))
+    return false;
+  if (!ReadDwordFromEdit(dlg, IDC_EDIT_REPEAT_DELAY, &values.repeat_delay))
+    return false;
+  if (!ReadDwordFromEdit(dlg, IDC_EDIT_REPEAT_RATE, &values.repeat_rate))
+    return false;
+
+  *out_values = values;
+  return true;
+}
+
+void AllowSingleInstanceActivateMessageIfElevated(HWND hwnd)
+{
+  if (!::IsWindow(hwnd))
+    return;
+
+  if (!FilterKey::IsProcessElevatedNow())
+    return;
+
+  if (::ChangeWindowMessageFilterEx(hwnd,
+                                    CFilterKeySettingDlg::WM_ACTIVATE_EXISTING_INST,
+                                    MSGFLT_ALLOW,
+                                    nullptr) == FALSE)
+  {
+    const DWORD err = ::GetLastError();
+    DevLog::Writef(_T("[SingleInstance] ChangeWindowMessageFilterEx failed: err=%lu"), err);
+  }
+}
 }  // namespace
 
 #ifdef _DEBUG
@@ -73,6 +127,7 @@ ON_WM_PAINT()
 ON_WM_QUERYDRAGICON()
 ON_WM_SIZE()
 ON_WM_TIMER()
+ON_WM_CTLCOLOR()
 ON_WM_DESTROY()
 ON_WM_HOTKEY()
 ON_MESSAGE(WM_INPUT, &CFilterKeySettingDlg::OnRawInput)
@@ -108,6 +163,8 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   SetIcon(m_hIcon, TRUE);   // Set big icon
   SetIcon(m_hIcon, FALSE);  // Set small icon
 
+  AllowSingleInstanceActivateMessageIfElevated(GetSafeHwnd());
+
   if (!EnsureAdminGuardOnStartup())
     return FALSE;
 
@@ -134,6 +191,8 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
 
   // Kill Focus Edit control
   OnEnKillFocusTesting();
+  EnsureEditModeHintLabel();
+  UpdateEditModeCaption();
 
   // Set initial focus to the OFF preset button if available
   if (auto* off_button = GetDlgItem(GetPresetButtonControlId(PRESET_OFF));
@@ -327,6 +386,28 @@ void CFilterKeySettingDlg::OnSize(UINT nType, int cx, int cy)
   }
 }
 
+HBRUSH CFilterKeySettingDlg::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+  HBRUSH brush = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
+
+  if (!pWnd || !edit_mode_hint_label_ready_)
+    return brush;
+
+  if (!::IsWindow(edit_mode_hint_label_.GetSafeHwnd()))
+    return brush;
+
+  if (pWnd->GetSafeHwnd() != edit_mode_hint_label_.GetSafeHwnd())
+    return brush;
+
+  if (nCtlColor == CTLCOLOR_STATIC)
+  {
+    pDC->SetBkMode(TRANSPARENT);
+    pDC->SetTextColor(edit_mode_hint_text_color_);
+  }
+
+  return brush;
+}
+
 LRESULT CFilterKeySettingDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
 {
   if (wParam != TRAY_ICON_ID)
@@ -372,7 +453,8 @@ LRESULT CFilterKeySettingDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
       else if (cmd >= IDM_TRAY_PRESET_BASE && cmd < IDM_TRAY_PRESET_BASE + static_cast<UINT>(preset_count_))
       {
         const int selected_preset = static_cast<int>(cmd - IDM_TRAY_PRESET_BASE);
-        last_selected_            = selected_preset;
+        ResetEditMode();
+        last_selected_ = selected_preset;
         ActivatePreset(selected_preset, FALSE, TRUE, _T("Tray menu"));
       }
 
@@ -425,8 +507,7 @@ LRESULT CFilterKeySettingDlg::OnActivateExisting(WPARAM wParam, LPARAM lParam)
   }
   else
   {
-    ShowWindow(SW_RESTORE);
-    SetForegroundWindow();
+    BringDialogToForeground();
   }
 
   return 0;
@@ -483,7 +564,7 @@ bool CFilterKeySettingDlg::AddTrayIcon()
   tray_icon_data_.uFlags           = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   tray_icon_data_.uCallbackMessage = WM_TRAYICON_MSG;
   tray_icon_data_.hIcon            = m_hIcon;
-  _tcscpy_s(tray_icon_data_.szTip, _T("Filter Key Setting"));
+  _tcscpy_s(tray_icon_data_.szTip, static_cast<LPCTSTR>(GetAppName()));
 
   tray_icon_added_ = (Shell_NotifyIcon(NIM_ADD, &tray_icon_data_) == TRUE);
   return tray_icon_added_;
@@ -501,8 +582,41 @@ void CFilterKeySettingDlg::RemoveTrayIcon()
 void CFilterKeySettingDlg::RestoreFromTray()
 {
   RemoveTrayIcon();
-  ShowWindow(SW_RESTORE);
-  SetForegroundWindow();
+  BringDialogToForeground();
+}
+
+void CFilterKeySettingDlg::BringDialogToForeground()
+{
+  const HWND hwnd = GetSafeHwnd();
+  if (!::IsWindow(hwnd))
+    return;
+
+  if (::IsIconic(hwnd))
+    ShowWindow(SW_RESTORE);
+  else
+    ShowWindow(SW_SHOW);
+
+  const HWND  fg_hwnd   = ::GetForegroundWindow();
+  const DWORD fg_thread = fg_hwnd ? ::GetWindowThreadProcessId(fg_hwnd, nullptr) : 0;
+  const DWORD ui_thread = ::GetCurrentThreadId();
+
+  bool attached_input = false;
+  if (fg_thread != 0 && fg_thread != ui_thread)
+    attached_input = (::AttachThreadInput(ui_thread, fg_thread, TRUE) == TRUE);
+
+  ::BringWindowToTop(hwnd);
+  ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  ::SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+  ::SetForegroundWindow(hwnd);
+  ::SetActiveWindow(hwnd);
+
+  if (attached_input)
+    ::AttachThreadInput(ui_thread, fg_thread, FALSE);
+
+  if (::GetForegroundWindow() != hwnd)
+    ::FlashWindow(hwnd, TRUE);
 }
 
 void CFilterKeySettingDlg::RegisterPresetHotkeys()
@@ -805,6 +919,7 @@ void CFilterKeySettingDlg::OnBnClickedCheckEditMode()
       {
         if (auto edit_mode_button = static_cast<CButton*>(GetDlgItem(IDC_CHECK_EDIT_MODE)); edit_mode_button)
           edit_mode_button->SetCheck(BST_CHECKED);
+        UpdateEditModeCaption();
         return;
       }
 
@@ -813,6 +928,7 @@ void CFilterKeySettingDlg::OnBnClickedCheckEditMode()
     }
 
     UpdateOption();
+    UpdateEditModeCaption();
   }
 }
 
@@ -957,24 +1073,30 @@ void CFilterKeySettingDlg::BnClickPreset(const int target_preset)
   if (PRESET_IS_VALID(target_preset) == false)
     return;
 
-  ResetEditMode();
-  last_selected_ = target_preset;
-
   const bool press_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
   const bool press_alt  = (GetKeyState(VK_MENU) & 0x8000) != 0;
   const bool keybind_on = KeyBinding::IsEnabled();
 
   if (press_alt && keybind_on)
   {
+    ResetEditMode();
+    last_selected_ = target_preset;
     PopupKeyBindingDialog(target_preset);
   }
   else if (press_ctrl)
   {
+    ResetEditMode();
+    last_selected_ = target_preset;
     if (PRESET_IS_ON(target_preset))
       PopupRenameDialog(target_preset);
   }
   else
   {
+    if (!ConfirmSaveIfEditingAndDirty(target_preset))
+      return;
+
+    ResetEditMode();
+    last_selected_ = target_preset;
     ActivatePreset(target_preset, FALSE, TRUE, _T("Preset button"));
   }
 }
@@ -1132,6 +1254,112 @@ void CFilterKeySettingDlg::ResetEditMode()
   if (auto* btn = static_cast<CButton*>(GetDlgItem(IDC_CHECK_EDIT_MODE)); btn)
     btn->SetCheck(BST_UNCHECKED);
   preset_before_edit_ = PRESET_OFF;
+  UpdateEditModeCaption();
+}
+
+bool CFilterKeySettingDlg::ConfirmSaveIfEditingAndDirty(const int next_preset)
+{
+  if (!IsEditModeChecked())
+    return true;
+
+  const int editing_preset = PRESET_IS_ON(last_selected_) ? last_selected_ : PRESET_OFF;
+  if (!PRESET_IS_ON(editing_preset))
+    return true;
+
+  PresetValues edited = {};
+  if (!ReadPresetValuesFromEdits(this, &edited))
+    return false;
+
+  const auto validation = PresetService::ValidateValues(edited);
+  if (!validation.ok)
+  {
+    AfxMessageBox(validation.error_message);
+    return false;
+  }
+
+  const auto current_values = PresetService::GetPresetValues(editing_preset);
+  const bool changed        = (edited.accept_delay != current_values.accept_delay) ||
+                              (edited.repeat_delay != current_values.repeat_delay) ||
+                              (edited.repeat_rate != current_values.repeat_rate);
+  if (!changed)
+    return true;
+
+  const int answer = AfxMessageBox(
+      _T("수정된 값이 저장되지 않았습니다. 저장하시겠습니까?"),
+      MB_ICONQUESTION | MB_YESNO);
+  if (answer != IDYES)
+    return true;
+
+  bool saved_changed = false;
+  if (!PresetService::SavePresetValues(editing_preset, edited, &saved_changed))
+  {
+    AfxMessageBox(_T("프리셋을 수정할 수 없습니다\r\n관리자 권한으로 실행하세요."));
+    return false;
+  }
+
+  return true;
+}
+
+void CFilterKeySettingDlg::UpdateEditModeCaption()
+{
+  if (auto* btn = static_cast<CButton*>(GetDlgItem(IDC_CHECK_EDIT_MODE)); btn)
+  {
+    const bool checked = IsEditModeChecked();
+    btn->SetWindowText(checked ? _T("저장하기") : _T("수정하기"));
+    btn->Invalidate();
+    btn->UpdateWindow();
+
+    EnsureEditModeHintLabel();
+    if (edit_mode_hint_label_ready_ && ::IsWindow(edit_mode_hint_label_.GetSafeHwnd()))
+    {
+      edit_mode_hint_label_.ShowWindow(checked ? SW_SHOW : SW_HIDE);
+      edit_mode_hint_label_.Invalidate();
+      edit_mode_hint_label_.UpdateWindow();
+    }
+  }
+}
+
+void CFilterKeySettingDlg::EnsureEditModeHintLabel()
+{
+  if (edit_mode_hint_label_ready_ && ::IsWindow(edit_mode_hint_label_.GetSafeHwnd()))
+    return;
+
+  auto* edit_mode_button = GetDlgItem(IDC_CHECK_EDIT_MODE);
+  if (!edit_mode_button)
+    return;
+
+  CRect button_rect;
+  edit_mode_button->GetWindowRect(&button_rect);
+  ScreenToClient(&button_rect);
+
+  CRect client_rect;
+  GetClientRect(&client_rect);
+
+  int left   = button_rect.right + 10;
+  int top    = button_rect.top + 4;
+  int width  = 280;
+  int height = button_rect.Height();
+
+  if (left + width > client_rect.right - 10)
+  {
+    left  = button_rect.left;
+    top   = button_rect.bottom + 2;
+    width = max(180, client_rect.right - left - 10);
+  }
+
+  const CRect label_rect(left, top, left + width, top + height);
+  if (!edit_mode_hint_label_.Create(
+          _T("저장하려면 이 체크를 다시 눌러 해제하세요."),
+          WS_CHILD | SS_LEFT,
+          label_rect,
+          this))
+    return;
+
+  if (auto* font = edit_mode_button->GetFont(); font)
+    edit_mode_hint_label_.SetFont(font);
+
+  edit_mode_hint_label_.ShowWindow(SW_HIDE);
+  edit_mode_hint_label_ready_ = true;
 }
 
 void CFilterKeySettingDlg::UpdateOption(BOOL write /* = TRUE*/)
@@ -1443,6 +1671,8 @@ void CFilterKeySettingDlg::UpdateInterface(const int preset)
   auto* edit_btn = static_cast<CButton*>(GetDlgItem(IDC_CHECK_EDIT_MODE));
   if (edit_btn)
     edit_btn->EnableWindow(PRESET_IS_ON(preset) ? TRUE : FALSE);
+
+  UpdateEditModeCaption();
 
   const bool edit_on = edit_btn ? (edit_btn->GetCheck() != 0) : false;
   const bool enable  = PRESET_IS_ON(preset) && edit_on;
@@ -1784,25 +2014,8 @@ bool CFilterKeySettingDlg::SaveCurrentEditingValues(const int target_preset, boo
   if (!PRESET_IS_ON(target_preset))
     return true;
 
-  const auto ReadDwordFromEdit = [&](int control_id, DWORD* out) -> bool {
-    BOOL ok = FALSE;
-    UINT u  = GetDlgItemInt(control_id, &ok, FALSE);
-    if (!ok)
-    {
-      AfxMessageBox(_T("숫자 형식이 올바르지 않습니다."));
-      GetDlgItem(control_id)->SetFocus();
-      return false;
-    }
-    *out = static_cast<DWORD>(u);
-    return true;
-  };
-
   PresetValues values = {};
-  if (!ReadDwordFromEdit(IDC_EDIT_ACCEPT_DELAY, &values.accept_delay))
-    return false;
-  if (!ReadDwordFromEdit(IDC_EDIT_REPEAT_DELAY, &values.repeat_delay))
-    return false;
-  if (!ReadDwordFromEdit(IDC_EDIT_REPEAT_RATE, &values.repeat_rate))
+  if (!ReadPresetValuesFromEdits(this, &values))
     return false;
 
   auto validation = PresetService::ValidateValues(values);

@@ -41,6 +41,7 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg LRESULT OnRawInput(WPARAM wParam, LPARAM lParam);
   afx_msg void    OnSize(UINT nType, int cx, int cy);
   afx_msg void    OnTimer(UINT_PTR nIDEvent);
+  afx_msg HBRUSH  OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
   afx_msg LRESULT OnTrayIcon(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnMouseTrackerTriggered(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnDebugDialogClosed(WPARAM wParam, LPARAM lParam);
@@ -69,7 +70,10 @@ class CFilterKeySettingDlg : public CDialogEx
   void BnClickPreset(const int preset);
   void ActivatePreset(const int preset, BOOL alert, BOOL beep = FALSE, LPCTSTR reason = nullptr);
   bool SaveCurrentEditingValues(const int target_preset, bool* changed = nullptr);
+  bool ConfirmSaveIfEditingAndDirty(const int next_preset);
   void ResetEditMode();
+  void UpdateEditModeCaption();
+  void EnsureEditModeHintLabel();
 
   // Dialog / popup
   void PopupRenameDialog(const int preset);
@@ -100,6 +104,7 @@ class CFilterKeySettingDlg : public CDialogEx
   bool AddTrayIcon();
   void RemoveTrayIcon();
   void RestoreFromTray();
+  void BringDialogToForeground();
 
   // Hotkey registration
   void RegisterPresetHotkeys();
@@ -150,6 +155,10 @@ class CFilterKeySettingDlg : public CDialogEx
   bool                  using_raw_input_mode_                = false;
   UINT                  raw_input_modifiers_down_            = 0;
   std::array<bool, 256> raw_input_key_down_                  = {};
+
+  CStatic  edit_mode_hint_label_;
+  bool     edit_mode_hint_label_ready_ = false;
+  COLORREF edit_mode_hint_text_color_  = RGB(220, 20, 60);
 
   // Dynamic UI
   std::vector<std::unique_ptr<CButton>> preset_buttons_;

@@ -114,7 +114,7 @@ HWND ResolvePromptOwnerWindow(CWnd* owner)
 
 void ShowRestartFailedMessage(HWND parent)
 {
-  ::MessageBox(parent, _T("프로그램 재시작에 실패했습니다."), _T("알림"), MB_OK | MB_ICONERROR | MB_TOPMOST);
+  ::MessageBox(parent, _T("프로그램 재시작에 실패했습니다."), GetAppName(), MB_OK | MB_ICONERROR | MB_TOPMOST);
 }
 
 void RequestForeground(HWND parent)
@@ -222,7 +222,7 @@ PromptResult PromptAdminRestartIfNeeded(CWnd* owner, const CString* option_key)
   config.cbSize           = sizeof(config);
   config.hwndParent       = parent;
   config.dwFlags          = TDF_POSITION_RELATIVE_TO_WINDOW;
-  config.pszWindowTitle   = _T("알림");
+  config.pszWindowTitle   = GetAppName();
   config.pszContent       = content;
   config.pButtons         = buttons;
   config.cButtons         = _countof(buttons);
@@ -254,7 +254,7 @@ PromptResult PromptAdminRestartIfNeeded(CWnd* owner, const CString* option_key)
 
   CString fallback_message = content;
   fallback_message += _T("\r\n\r\n[예] 권한 없이 진행\r\n[아니오] 관리자 권한으로 실행\r\n[취소] 취소");
-  const int fallback = ::MessageBox(parent, fallback_message, _T("알림"), MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST);
+  const int fallback = ::MessageBox(parent, fallback_message, GetAppName(), MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST);
 
   if (fallback == IDYES)
     return PromptResult::Proceed;
