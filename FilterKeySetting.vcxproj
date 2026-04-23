@@ -30,7 +30,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
+    <CharacterSet>Unicode</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -38,7 +38,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>MultiByte</CharacterSet>
+    <CharacterSet>Unicode</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -231,6 +231,7 @@ powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\Generate-Rel
     <ClInclude Include="UserDefine.hpp" />
     <ClInclude Include="UserDevLog.hpp" />
     <ClInclude Include="UserKeyBinding.hpp" />
+    <ClInclude Include="UserLanguage.hpp" />
     <ClInclude Include="UserMouseTracker.hpp" />
     <ClInclude Include="UserOption.hpp" />
     <ClInclude Include="UserPresetOSD.hpp" />
@@ -252,6 +253,7 @@ powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\Generate-Rel
     </ClCompile>
     <ClCompile Include="UserDevLog.cpp" />
     <ClCompile Include="UserKeyBinding.cpp" />
+    <ClCompile Include="UserLanguage.cpp" />
     <ClCompile Include="UserMouseTracker.cpp" />
     <ClCompile Include="UserOption.cpp" />
     <ClCompile Include="UserPresetOSD.cpp" />
@@ -263,6 +265,9 @@ powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\Generate-Rel
   <ItemGroup>
     <None Include=".clang-format" />
     <None Include="res\FilterKeySetting.rc2" />
+    <None Include="lang\FilterKeySettingLangKR.rc2" />
+    <None Include="lang\FilterKeySettingLangEN.rc2" />
+    <None Include="lang\FilterKeySettingLangJP.rc2" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\FilterKeySetting.ico" />

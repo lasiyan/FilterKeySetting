@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "UserPresetService.hpp"
 #include "UserFilterKey.hpp"
+#include "UserLanguage.hpp"
 #include "UserOption.hpp"
 // clang-format on
 
@@ -40,7 +41,7 @@ PresetValidation ValidateValues(const PresetValues& values)
   {
     result.ok         = false;
     result.field_name = _T("Accept Delay");
-    result.error_message.Format(_T("%s 값은 %lu에서 %lu 사이여야 합니다."),
+    result.error_message.Format(Lang::T(IDS_FMT_VALUE_RANGE),
                                 _T("Accept Delay"), 0UL, static_cast<unsigned long>(MAX_ACCEPT_DELAY));
     return result;
   }
@@ -49,7 +50,7 @@ PresetValidation ValidateValues(const PresetValues& values)
   {
     result.ok         = false;
     result.field_name = _T("Repeat Delay");
-    result.error_message.Format(_T("%s 값은 %lu에서 %lu 사이여야 합니다."),
+    result.error_message.Format(Lang::T(IDS_FMT_VALUE_RANGE),
                                 _T("Repeat Delay"), 0UL, static_cast<unsigned long>(MAX_REPEAT_DELAY));
     return result;
   }
@@ -58,7 +59,7 @@ PresetValidation ValidateValues(const PresetValues& values)
   {
     result.ok         = false;
     result.field_name = _T("Repeat Rate");
-    result.error_message.Format(_T("%s 값은 %lu에서 %lu 사이여야 합니다."),
+    result.error_message.Format(Lang::T(IDS_FMT_VALUE_RANGE),
                                 _T("Repeat Rate"), 0UL, static_cast<unsigned long>(MAX_REPEAT_RATE));
     return result;
   }

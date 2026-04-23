@@ -4,6 +4,7 @@
 #include "FilterKeySetting.h"
 #include "UserAdminGuard.hpp"
 #include "UserFilterKey.hpp"
+#include "UserLanguage.hpp"
 #include "UserPresetOSD.hpp"
 #include "afxdialogex.h"
 #include <shellapi.h>
@@ -45,6 +46,7 @@ ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS, &DialogDebug::OnBnClickedCheckPreset
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, &DialogDebug::OnBnClickedCheckPresetOffProcessRestore)
 ON_BN_CLICKED(IDC_CHECK_IF_FULL_SCREEN_GAME, &DialogDebug::OnBnClickedCheckIfFullScreenGame)
 ON_EN_KILLFOCUS(IDC_EDIT_PRESET_OFF_PROCESS, &DialogDebug::OnEnKillFocusEditPresetOffProcess)
+ON_CBN_SELCHANGE(IDC_COMBO_LANG, &DialogDebug::OnCbnSelchangeComboLang)
 END_MESSAGE_MAP()
 
 BOOL DialogDebug::OnInitDialog()
@@ -65,6 +67,31 @@ BOOL DialogDebug::OnInitDialog()
 
   // Tooltip
   tooltip_.Initialize(this);
+
+  // Apply localized text for non-Korean languages
+  static constexpr Lang::ControlTextEntry kDebugDlgTexts[] = {
+    { IDC_CHECK_DBG_MOVE_TRACKER, IDS_CHK_DBG_MOVE_TRACKER },
+    { IDC_STATIC_PRESET_COUNT_LABEL, IDS_LBL_PRESET_COUNT },
+    { IDC_STATIC_EXPERIMENTAL_GROUP, IDS_GRP_EXPERIMENTAL },
+    { IDC_CHECK_SYNC_FILTERKEY, IDS_CHK_SYNC_FILTERKEY },
+    { IDC_CHECK_MUTE_SOUND, IDS_CHK_MUTE_SOUND },
+    { IDC_CHECK_OFF_USE_WINDOWS_DEFAULT, IDS_CHK_OFF_USE_WINDOWS_DEFAULT },
+    { IDC_CHECK_IF_FULL_SCREEN_GAME, IDS_CHK_IF_FULL_SCREEN_GAME },
+    { IDC_STATIC_MOVE_SENSITIVITY_LABEL, IDS_LBL_MOVE_SENSITIVITY },
+    { IDC_CHECK_AUTO_START, IDS_CHK_AUTO_START },
+    { IDC_CHECK_ENABLE_PRESET_OSD, IDS_CHK_ENABLE_PRESET_OSD },
+    { IDC_STATIC_PRESET_OSD_ALPHA, IDS_LBL_OSD_ALPHA_TRANSPARENT },
+    { IDC_STATIC_PRESET_OSD_DURATION, IDS_LBL_OSD_DURATION },
+    { IDC_RADIO_PRESET_OSD_KEEP, IDS_RDO_OSD_KEEP },
+    { IDC_RADIO_PRESET_OSD_3SEC, IDS_RDO_OSD_3SEC },
+    { IDC_STATIC_PRESET_OSD_DURATION2, IDS_LBL_OSD_CORNER },
+    { IDC_STATIC_PRESET_OSD_DURATION3, IDS_LBL_OSD_SIZE },
+    { IDC_CHECK_PRESET_OFF_PROCESS, IDS_CHK_PRESET_OFF_PROCESS },
+    { IDC_STATIC_PROCESS_LABEL, IDS_LBL_PROCESS },
+    { IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, IDS_CHK_PRESET_OFF_PROCESS_RESTORE },
+  };
+  Lang::ApplyCaption(this, IDS_DLG_DEBUG_TITLE);
+  Lang::ApplyControlTexts(this, kDebugDlgTexts, _countof(kDebugDlgTexts));
 
   return TRUE;
 }
@@ -222,6 +249,15 @@ void DialogDebug::InitializeOptions()
     const bool checked = (GLOBAL_OPTION.getInteger(KEY_IF_FULL_SCREEN_GAME, 0) != 0);
     full_screen->SetCheck(checked ? BST_CHECKED : BST_UNCHECKED);
   }
+
+  if (auto* combo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_LANG)); combo)
+  {
+    combo->ResetContent();
+    combo->AddString(Lang::NativeName(AppLanguage::Korean));
+    combo->AddString(Lang::NativeName(AppLanguage::English));
+    combo->AddString(Lang::NativeName(AppLanguage::Japanese));
+    combo->SetCurSel(static_cast<int>(Lang::GetCurrent()));
+  }
 }
 
 void DialogDebug::NotifyOptionsChanged()
@@ -264,9 +300,11 @@ void DialogDebug::InitializeMouseSensitivity()
     return;
 
   combo->ResetContent();
-  static constexpr LPCTSTR kLabels[] = { _T("매우 낮음"), _T("낮음"), _T("보통"), _T("높음"), _T("매우 높음") };
-  for (auto& label : kLabels)
-    combo->AddString(label);
+  combo->AddString(Lang::T(IDS_LBL_VERY_LOW));
+  combo->AddString(Lang::T(IDS_LBL_LOW));
+  combo->AddString(Lang::T(IDS_LBL_NORMAL));
+  combo->AddString(Lang::T(IDS_LBL_HIGH));
+  combo->AddString(Lang::T(IDS_LBL_VERY_HIGH));
 
   const auto saved = static_cast<int>(GLOBAL_OPTION.getInteger(KEY_MOUSE_MOVE_SENSITIVITY, 2));
   combo->SetCurSel((saved >= 0 && saved <= 4) ? saved : 2);
@@ -287,7 +325,7 @@ void DialogDebug::OnCbnSelchangeComboMouseSensitivity()
 
   GLOBAL_OPTION.set(KEY_MOUSE_MOVE_SENSITIVITY, static_cast<DWORD>(sel));
 
-  static constexpr LPCTSTR kNames[] = { _T("매우 낮음"), _T("낮음"), _T("보통"), _T("높음"), _T("매우 높음") };
+  static constexpr LPCTSTR kNames[] = { _T("very_low"), _T("low"), _T("normal"), _T("high"), _T("very_high") };
   DevLog::Writef(_T("Option changed: mouse sensitivity = %s"), kNames[sel]);
   NotifyOptionsChanged();
 }
@@ -470,12 +508,7 @@ void DialogDebug::OnBnClickedCheckIfFullScreenGame()
 
   if (request_enable)
   {
-    const int answer = AfxMessageBox(_T("적용 전 주의 사항\r\n"
-                                        "- 전체화면이 아닌 창모드 사용 시 해당 기능은 필요하지 않습니다.\r\n"
-                                        "- HotKey 방식보다 보안 탐지에 민감하게 받아들여질 수 있습니다.\r\n"
-                                        "- 해당 기능 사용 대신 가능한 창모드를 권장드립니다.\r\n"
-                                        "- 추후 안전성이 확인되면 해당 메세지는 제거될 예정입니다.\r\n"
-                                        "\r\n기능을 활성화 하시겠습니까?"),
+    const int answer = AfxMessageBox(Lang::T(IDS_MSG_FULLSCREEN_GAME_WARNING),
                                      MB_OKCANCEL | MB_ICONWARNING);
     if (answer != IDOK)
     {
@@ -510,7 +543,7 @@ void DialogDebug::OnEnKillFocusEditPresetOffProcess()
 void DialogDebug::BrowseProcessFile()
 {
   CFileDialog dlg(TRUE, _T("exe"), nullptr, OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
-                  _T("실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*||"), this);
+                  Lang::T(IDS_FLT_EXE_FILES), this);
   if (dlg.DoModal() != IDOK)
     return;
 
@@ -530,7 +563,7 @@ void DialogDebug::ClearProcessFile()
   if (current.Trim().IsEmpty())
     return;
 
-  if (AfxMessageBox(_T("등록된 프로세스를 초기화하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES)
+  if (AfxMessageBox(Lang::T(IDS_MSG_RESET_PROCESS_CONFIRM), MB_YESNO | MB_ICONQUESTION) != IDYES)
     return;
 
   if (auto* edit = GetDlgItem(IDC_EDIT_PRESET_OFF_PROCESS); edit)
@@ -607,9 +640,7 @@ void DialogDebug::OnCbnSelchangeComboDbgPresetCount()
     return;
 
   CString message;
-  message.Format(_T("프리셋 개수를 %d개로 변경하려면 프로그램 재시작이 필요합니다.\r\n"
-                    "지금 다시 시작하시겠습니까?"),
-                 selected_count);
+  message.Format(Lang::T(IDS_FMT_PRESET_COUNT_RESTART), selected_count);
 
   const int answer = AfxMessageBox(message, MB_ICONQUESTION | MB_YESNO);
   if (answer != IDYES)
@@ -625,7 +656,44 @@ void DialogDebug::OnCbnSelchangeComboDbgPresetCount()
 
   if (!FilterKey::RestartProgram(this))
   {
-    AfxMessageBox(_T("프로그램 재시작에 실패했습니다."));
+    AfxMessageBox(Lang::T(IDS_MSG_RESTART_FAILED));
+    return;
+  }
+}
+
+void DialogDebug::OnCbnSelchangeComboLang()
+{
+  auto* combo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_LANG));
+  if (!combo)
+    return;
+
+  const int sel = combo->GetCurSel();
+  if (sel == CB_ERR)
+    return;
+
+  const int current = static_cast<int>(Lang::GetCurrent());
+  if (sel == current)
+    return;
+
+  const auto    target_lang = static_cast<AppLanguage>(sel);
+  CString       msg         = Lang::T(IDS_MSG_LANGUAGE_RESTART_CONFIRM);
+  const CString target_msg  = Lang::TFor(target_lang, IDS_MSG_LANGUAGE_RESTART_CONFIRM);
+  if (!target_msg.IsEmpty() && target_msg != msg)
+    msg += _T("\r\n\r\n") + target_msg;
+
+  const int answer = AfxMessageBox(msg, MB_YESNO | MB_ICONQUESTION);
+  if (answer != IDYES)
+  {
+    combo->SetCurSel(current);
+    return;
+  }
+
+  GLOBAL_OPTION.set(KEY_LANGUAGE, static_cast<DWORD>(sel));
+  DevLog::Writef(_T("Option changed: language = %d (restart accepted)"), sel);
+
+  if (!FilterKey::RestartProgram(this))
+  {
+    AfxMessageBox(Lang::T(IDS_MSG_RESTART_FAILED));
     return;
   }
 }
@@ -649,10 +717,10 @@ void DialogDebug::InitializeOsdOptions()
   if (auto* combo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_PRESET_OSD_CORNER)); combo)
   {
     combo->ResetContent();
-    combo->AddString(_T("좌측 상단"));
-    combo->AddString(_T("우측 상단"));
-    combo->AddString(_T("좌측 하단"));
-    combo->AddString(_T("우측 하단"));
+    combo->AddString(Lang::T(IDS_LBL_CORNER_TL));
+    combo->AddString(Lang::T(IDS_LBL_CORNER_TR));
+    combo->AddString(Lang::T(IDS_LBL_CORNER_BL));
+    combo->AddString(Lang::T(IDS_LBL_CORNER_BR));
 
     const int idx = UserPresetOSD::ClampPosition(static_cast<int>(GLOBAL_OPTION.getInteger(
         KEY_PRESET_OSD_CORNER, static_cast<DWORD>(UserPresetOSD::Corner::BottomRight))));
@@ -661,10 +729,10 @@ void DialogDebug::InitializeOsdOptions()
 
   if (auto* slider = static_cast<CSliderCtrl*>(GetDlgItem(IDC_SLIDER_PRESET_OSD_ALPHA)); slider)
   {
-    slider->SetRange(0, 255);
-    slider->SetTicFreq(15);
-    slider->SetPos(
-        UserPresetOSD::ClampAlpha(static_cast<int>(GLOBAL_OPTION.getInteger(KEY_PRESET_OSD_ALPHA, 220))));
+    slider->SetRange(0, 100);
+    slider->SetTicFreq(10);
+    const int stored = UserPresetOSD::ClampAlpha(static_cast<int>(GLOBAL_OPTION.getInteger(KEY_PRESET_OSD_ALPHA, 220)));
+    slider->SetPos((stored * 100) / 255);
   }
 
   if (auto* combo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_PRESET_OSD_SIZE)); combo)
@@ -705,7 +773,7 @@ void DialogDebug::SaveOsdOptionsFromUI()
 
   int alpha = 220;
   if (auto* slider = static_cast<CSliderCtrl*>(GetDlgItem(IDC_SLIDER_PRESET_OSD_ALPHA)); slider)
-    alpha = UserPresetOSD::ClampAlpha(slider->GetPos());
+    alpha = UserPresetOSD::ClampAlpha((slider->GetPos() * 255) / 100);
 
   bool keep_visible = false;
   if (auto* keep_radio = static_cast<CButton*>(GetDlgItem(IDC_RADIO_PRESET_OSD_KEEP)); keep_radio)

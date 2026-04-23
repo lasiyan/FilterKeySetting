@@ -3,6 +3,7 @@
 #include "UserAdminGuard.hpp"
 #include "UserDefine.hpp"
 #include "UserFilterKey.hpp"
+#include "UserLanguage.hpp"
 // clang-format on
 
 namespace AdminGuard {
@@ -15,17 +16,17 @@ constexpr int kBtnCancel  = 1003;
 struct AdminRequiredOption
 {
   LPCTSTR key;
-  LPCTSTR label;
+  UINT    label_ids;
 };
 
 constexpr std::array<AdminRequiredOption, 7> kAdminRequiredOptions = {
-  AdminRequiredOption{ KEY_ENABLE_KEYBIND, _T("단축키를 통한 프리셋 변경 기능 사용 (Alt + 프리셋 버튼 클릭)") },
-  AdminRequiredOption{ KEY_ENABLE_TOGGLE_KEYBIND, _T("단축키를 통한 프리셋 토글 기능 활성화") },
-  AdminRequiredOption{ KEY_DISABLE_WITH_ESC, _T("백그라운드에서 ESC 버튼이 입력되면 필터키 끄기") },
-  AdminRequiredOption{ KEY_IF_FULL_SCREEN_GAME, _T("전체화면 게임 안에서 단축키 기능 활성화") },
-  AdminRequiredOption{ KEY_ENABLE_MOUSE_MOVE_TRACKER, _T("백그라운드 마우스 이동 시 필터키 종료") },
-  AdminRequiredOption{ KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, _T("백그라운드에서 마우스 더블클릭 시 필터키 끄기") },
-  AdminRequiredOption{ KEY_PROCESS_OFF_ENABLED, _T("특정 프로세스에서 벗어나면 필터키 종료") },
+  AdminRequiredOption{ KEY_ENABLE_KEYBIND, IDS_ADMIN_OPT_KEYBIND },
+  AdminRequiredOption{ KEY_ENABLE_TOGGLE_KEYBIND, IDS_ADMIN_OPT_TOGGLE_KEYBIND },
+  AdminRequiredOption{ KEY_DISABLE_WITH_ESC, IDS_ADMIN_OPT_DISABLE_WITH_ESC },
+  AdminRequiredOption{ KEY_IF_FULL_SCREEN_GAME, IDS_ADMIN_OPT_FULL_SCREEN_GAME },
+  AdminRequiredOption{ KEY_ENABLE_MOUSE_MOVE_TRACKER, IDS_ADMIN_OPT_MOUSE_MOVE_TRACKER },
+  AdminRequiredOption{ KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, IDS_ADMIN_OPT_MOUSE_DBLCLICK_TRACKER },
+  AdminRequiredOption{ KEY_PROCESS_OFF_ENABLED, IDS_ADMIN_OPT_PROCESS_OFF },
 };
 
 CString FindOptionLabel(const CString& option_key)
@@ -33,7 +34,7 @@ CString FindOptionLabel(const CString& option_key)
   for (const auto& option : kAdminRequiredOptions)
   {
     if (option_key.Compare(option.key) == 0)
-      return CString(option.label);
+      return Lang::T(option.label_ids);
   }
 
   return CString();
@@ -62,7 +63,7 @@ CString BuildEnabledOptionSummary()
       summary += _T("\r\n");
 
     summary += _T("- ");
-    summary += option.label;
+    summary += Lang::T(option.label_ids);
   }
 
   return summary;
@@ -76,7 +77,7 @@ CString BuildPromptMessage(const CString* option_key)
     CString label = FindOptionLabel(*option_key);
     if (!label.IsEmpty())
     {
-      content.Format(_T("다음 옵션은 관리자 권한에서 더 안정적으로 동작합니다.\r\n- %s"),
+      content.Format(Lang::T(IDS_FMT_ADMIN_REQUIRED),
                      static_cast<LPCTSTR>(label));
     }
   }
@@ -86,16 +87,16 @@ CString BuildPromptMessage(const CString* option_key)
     CString enabled = BuildEnabledOptionSummary();
     if (!enabled.IsEmpty())
     {
-      content = _T("다음 활성화된 옵션은 관리자 권한에서 더 안정적으로 동작합니다.\r\n");
+      content = Lang::T(IDS_MSG_ADMIN_ENABLED_PREFIX);
       content += enabled;
     }
     else
     {
-      content = _T("일부 기능은 관리자 권한에서 더 안정적으로 동작합니다.");
+      content = Lang::T(IDS_MSG_ADMIN_GENERIC);
     }
   }
 
-  content += _T("\r\n\r\n관리자 권한으로 프로그램을 다시 실행하시겠습니까?");
+  content += Lang::T(IDS_MSG_ADMIN_RESTART_SUFFIX);
 
   return content;
 }
@@ -114,7 +115,7 @@ HWND ResolvePromptOwnerWindow(CWnd* owner)
 
 void ShowRestartFailedMessage(HWND parent)
 {
-  ::MessageBox(parent, _T("프로그램 재시작에 실패했습니다."), GetAppName(), MB_OK | MB_ICONERROR | MB_TOPMOST);
+  ::MessageBox(parent, Lang::T(IDS_MSG_RESTART_FAILED), GetAppName(), MB_OK | MB_ICONERROR | MB_TOPMOST);
 }
 
 void RequestForeground(HWND parent)
@@ -212,10 +213,14 @@ PromptResult PromptAdminRestartIfNeeded(CWnd* owner, const CString* option_key)
   else if (::IsWindow(parent))
     position_context.monitor = ::MonitorFromWindow(parent, MONITOR_DEFAULTTONEAREST);
 
+  CString btn_proceed = Lang::T(IDS_BTN_PROCEED_NO_ADMIN);
+  CString btn_restart = Lang::T(IDS_BTN_RESTART_AS_ADMIN);
+  CString btn_cancel  = Lang::T(IDS_BTN_CANCEL);
+
   TASKDIALOG_BUTTON buttons[] = {
-    { kBtnProceed, _T("권한 없이 진행") },
-    { kBtnRestart, _T("관리자 권한으로 재실행") },
-    { kBtnCancel, _T("취소") },
+    { kBtnProceed, static_cast<LPCTSTR>(btn_proceed) },
+    { kBtnRestart, static_cast<LPCTSTR>(btn_restart) },
+    { kBtnCancel, static_cast<LPCTSTR>(btn_cancel) },
   };
 
   TASKDIALOGCONFIG config = {};
@@ -253,7 +258,7 @@ PromptResult PromptAdminRestartIfNeeded(CWnd* owner, const CString* option_key)
   }
 
   CString fallback_message = content;
-  fallback_message += _T("\r\n\r\n[예] 권한 없이 진행\r\n[아니오] 관리자 권한으로 실행\r\n[취소] 취소");
+  fallback_message += Lang::T(IDS_FMT_ADMIN_FALLBACK);
   const int fallback = ::MessageBox(parent, fallback_message, GetAppName(), MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST);
 
   if (fallback == IDYES)

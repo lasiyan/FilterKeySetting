@@ -8,6 +8,7 @@
 #include "FilterKeySetting.h"
 #include "FilterKeySettingDlg.h"
 #include "UserFilterKey.hpp"
+#include "UserLanguage.hpp"
 #include <tlhelp32.h>
 // clang-format on
 
@@ -180,9 +181,11 @@ BOOL CFilterKeySettingApp::InitInstance()
   // such as the name of your company or organization
   if (InitializeOptionValues() == false)
   {
-    AfxMessageBox(_T("레지스트리 생성에 실패하였습니다.\r\n프로그램을 관리자 권한으로 실행하세요."));
+    AfxMessageBox(Lang::T(IDS_MSG_REGISTRY_CREATE_FAIL));
     return FALSE;
   }
+
+  Lang::ApplyAtStartup();
 
   CFilterKeySettingDlg dlg;
   m_pMainWnd        = &dlg;

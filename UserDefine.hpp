@@ -37,6 +37,7 @@
 #define KEY_FILTERKEY_BACKUP_DELAY        (_T("filterkey_backup_delay"))
 #define KEY_FILTERKEY_BACKUP_REPEAT       (_T("filterkey_backup_repeat"))
 #define KEY_FILTERKEY_BACKUP_FLAGS        (_T("filterkey_backup_flags"))
+#define KEY_LANGUAGE                      (_T("language"))
 
 // Registry keys - preset options
 #define KEY_PRESET_TITLE  (_T("preset_title"))

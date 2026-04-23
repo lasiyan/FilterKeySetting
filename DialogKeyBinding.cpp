@@ -6,6 +6,7 @@
 #include "FilterKeySetting.h"
 #include "DialogKeyBinding.h"
 #include "UserKeyBinding.hpp"
+#include "UserLanguage.hpp"
 #include "afxdialogex.h"
 // clang-format on
 
@@ -35,6 +36,14 @@ BOOL DialogKeyBinding::OnInitDialog()
 
   hotkey_text_ = KeyBinding::HotkeyToString(hotkey_value_, true);
   UpdateData(FALSE);
+
+  static constexpr Lang::ControlTextEntry kKeyBindDlgTexts[] = {
+    { IDC_STATIC_KEY_BINDING_GUIDE, IDS_LBL_KEYBIND_GUIDE },
+    { IDOK, IDS_BTN_APPLY },
+    { IDCANCEL, IDS_BTN_CANCEL },
+  };
+  Lang::ApplyCaption(this, IDS_DLG_KEYBIND_TITLE);
+  Lang::ApplyControlTexts(this, kKeyBindDlgTexts, _countof(kKeyBindDlgTexts));
 
   return TRUE;
 }

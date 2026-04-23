@@ -19,6 +19,7 @@
 #include "UserAdminGuard.hpp"
 #include "UserPresetOSD.hpp"
 #include "UserPresetService.hpp"
+#include "UserLanguage.hpp"
 #include <algorithm>
 // clang-format on
 
@@ -56,7 +57,7 @@ bool ReadDwordFromEdit(CDialogEx* dlg, int control_id, DWORD* out)
   UINT u  = dlg->GetDlgItemInt(control_id, &ok, FALSE);
   if (!ok)
   {
-    AfxMessageBox(_T("숫자 형식이 올바르지 않습니다."));
+    AfxMessageBox(Lang::T(IDS_MSG_INVALID_NUMBER));
     if (auto* ctrl = dlg->GetDlgItem(control_id); ctrl)
       ctrl->SetFocus();
     return false;
@@ -193,6 +194,18 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   OnEnKillFocusTesting();
   EnsureEditModeHintLabel();
   UpdateEditModeCaption();
+
+  // Apply localized text for non-Korean languages
+  static constexpr Lang::ControlTextEntry kMainDlgTexts[] = {
+    { IDC_CHECK_RESTORE_SETTING, IDS_CHK_RESTORE_SETTING },
+    { IDC_CHECK_DISABLE_HOTKEY, IDS_CHK_DISABLE_HOTKEY },
+    { IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER, IDS_CHK_MOUSE_DBLCLICK_TRACKER },
+    { IDC_CHECK_ENABLE_TOGGLE_KEYBIND, IDS_CHK_TOGGLE_KEYBIND },
+    { IDC_CHECK_MOVE_TO_TRAY, IDS_CHK_MOVE_TO_TRAY },
+    { IDC_CHECK_ENABLE_KEYBIND, IDS_CHK_ENABLE_KEYBIND },
+    { IDC_CHECK_DISABLE_WITH_ESC, IDS_CHK_DISABLE_WITH_ESC },
+  };
+  Lang::ApplyControlTexts(this, kMainDlgTexts, _countof(kMainDlgTexts));
 
   // Set initial focus to the OFF preset button if available
   if (auto* off_button = GetDlgItem(GetPresetButtonControlId(PRESET_OFF));
@@ -422,7 +435,7 @@ LRESULT CFilterKeySettingDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
     CMenu popup;
     if (popup.CreatePopupMenu())
     {
-      popup.AppendMenu(MF_STRING, IDM_TRAY_OPEN, _T("열기"));
+      popup.AppendMenu(MF_STRING, IDM_TRAY_OPEN, Lang::T(IDS_TRAY_OPEN));
       popup.AppendMenu(MF_SEPARATOR);
 
       const UINT active_preset = GLOBAL_OPTION.getInteger(KEY_LAST_PRESET);
@@ -434,7 +447,7 @@ LRESULT CFilterKeySettingDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
       }
 
       popup.AppendMenu(MF_SEPARATOR);
-      popup.AppendMenu(MF_STRING, IDM_TRAY_EXIT, _T("종료"));
+      popup.AppendMenu(MF_STRING, IDM_TRAY_EXIT, Lang::T(IDS_TRAY_EXIT));
 
       POINT cursor;
       GetCursorPos(&cursor);
@@ -807,7 +820,8 @@ void CFilterKeySettingDlg::RefreshPresetButtonCaption(const int preset)
     return;
 
   PresetOption option(preset);
-  CString      title   = option.getString(KEY_PRESET_TITLE);
+  CString      title   = (preset == PRESET_OFF) ? Lang::T(IDS_PRESET_NAME_OFF)
+                                                : option.getString(KEY_PRESET_TITLE);
   CString      caption = title;
 
   if (KeyBinding::IsEnabled() && alt_hotkey_view_)
@@ -1032,8 +1046,7 @@ void CFilterKeySettingDlg::OnBnClickedCheckDisableWithEsc()
     {
       if (KeyBinding::IsActiveHotkeyAssigned(VK_ESCAPE, 0, preset_count_))
       {
-        AfxMessageBox(_T("안내: 현재 활성 단축키에 ESC가 포함되어 있습니다.\r\n"
-                         "이 경우 '백그라운드에서 ESC로 프리셋 끄기' 동작은 실행되지 않습니다."));
+        AfxMessageBox(Lang::T(IDS_MSG_ESC_HOTKEY_CONFLICT));
       }
     }
   }
@@ -1050,7 +1063,7 @@ void CFilterKeySettingDlg::OnEnSetFocusTesting()
 void CFilterKeySettingDlg::OnEnKillFocusTesting()
 {
   if (auto* ctrl = GetDlgItem(IDC_EDIT_TESTING); ctrl)
-    ctrl->SetWindowText(_T("설정 값 테스트 해보기"));
+    ctrl->SetWindowText(Lang::T(IDS_BTN_TEST_SETTINGS));
 }
 
 void CFilterKeySettingDlg::OnEnSetFocusToggleKeybind()
@@ -1240,9 +1253,9 @@ void CFilterKeySettingDlg::ActivatePreset(const int preset, BOOL alert, BOOL bee
   if (alert)
   {
     if (ok)
-      AfxMessageBox(_T("프리셋이 저장되었습니다."));
+      AfxMessageBox(Lang::T(IDS_MSG_PRESET_SAVED));
     else
-      AfxMessageBox(_T("프리셋을 수정할 수 없습니다\r\n관리자 권한으로 실행하세요."));
+      AfxMessageBox(Lang::T(IDS_MSG_NEED_ADMIN_FOR_EDIT));
   }
 
   last_selected_ = target_preset;
@@ -1285,7 +1298,7 @@ bool CFilterKeySettingDlg::ConfirmSaveIfEditingAndDirty(const int next_preset)
     return true;
 
   const int answer = AfxMessageBox(
-      _T("수정된 값이 저장되지 않았습니다. 저장하시겠습니까?"),
+      Lang::T(IDS_MSG_CONFIRM_SAVE_UNSAVED),
       MB_ICONQUESTION | MB_YESNO);
   if (answer != IDYES)
     return true;
@@ -1293,7 +1306,7 @@ bool CFilterKeySettingDlg::ConfirmSaveIfEditingAndDirty(const int next_preset)
   bool saved_changed = false;
   if (!PresetService::SavePresetValues(editing_preset, edited, &saved_changed))
   {
-    AfxMessageBox(_T("프리셋을 수정할 수 없습니다\r\n관리자 권한으로 실행하세요."));
+    AfxMessageBox(Lang::T(IDS_MSG_NEED_ADMIN_FOR_EDIT));
     return false;
   }
 
@@ -1305,7 +1318,7 @@ void CFilterKeySettingDlg::UpdateEditModeCaption()
   if (auto* btn = static_cast<CButton*>(GetDlgItem(IDC_CHECK_EDIT_MODE)); btn)
   {
     const bool checked = IsEditModeChecked();
-    btn->SetWindowText(checked ? _T("저장하기") : _T("수정하기"));
+    btn->SetWindowText(checked ? Lang::T(IDS_BTN_SAVE) : Lang::T(IDS_BTN_EDIT));
     btn->Invalidate();
     btn->UpdateWindow();
 
@@ -1349,7 +1362,7 @@ void CFilterKeySettingDlg::EnsureEditModeHintLabel()
 
   const CRect label_rect(left, top, left + width, top + height);
   if (!edit_mode_hint_label_.Create(
-          _T("저장하려면 이 체크를 다시 눌러 해제하세요."),
+          Lang::T(IDS_LBL_EDIT_MODE_HINT),
           WS_CHILD | SS_LEFT,
           label_rect,
           this))
@@ -1641,12 +1654,14 @@ void CFilterKeySettingDlg::RefreshToggleHotkeyEditText()
 void CFilterKeySettingDlg::UpdateInterface(const int preset)
 {
   {
-    PresetOption option(GLOBAL_OPTION.getInteger(KEY_LAST_PRESET));
+    const int    last_preset = static_cast<int>(GLOBAL_OPTION.getInteger(KEY_LAST_PRESET));
+    PresetOption option(last_preset);
     CString      window_title;
-    CString      preset_title = option.getString(KEY_PRESET_TITLE);
-    window_title.Format(_T("활성화된 프리셋 : %s"), (LPCTSTR)preset_title);
+    CString      preset_title = (last_preset == PRESET_OFF) ? Lang::T(IDS_PRESET_NAME_OFF)
+                                                            : option.getString(KEY_PRESET_TITLE);
+    window_title.Format(Lang::T(IDS_FMT_WINDOW_TITLE_ACTIVE), (LPCTSTR)preset_title);
     if (FilterKey::IsProcessElevatedNow())
-      window_title += _T(" (관리자 모드)");
+      window_title += Lang::T(IDS_LBL_ADMIN_MODE_SUFFIX);
     SetWindowText(window_title);
   }
 

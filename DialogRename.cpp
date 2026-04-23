@@ -5,6 +5,7 @@
 #include "pch.h"
 #include "FilterKeySetting.h"
 #include "DialogRename.h"
+#include "UserLanguage.hpp"
 #include "afxdialogex.h"
 // clang-format on
 
@@ -37,6 +38,13 @@ BOOL DialogRename::OnInitDialog()
 {
   CDialogEx::OnInitDialog();
 
+  static constexpr Lang::ControlTextEntry kRenameDlgTexts[] = {
+    { IDOK, IDS_BTN_APPLY },
+    { IDCANCEL, IDS_BTN_CANCEL },
+  };
+  Lang::ApplyCaption(this, IDS_DLG_RENAME_TITLE);
+  Lang::ApplyControlTexts(this, kRenameDlgTexts, _countof(kRenameDlgTexts));
+
   return TRUE;  // return TRUE unless you set the focus to a control
   // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
 }
@@ -57,7 +65,7 @@ void DialogRename::OnOK()
 
   if (new_name_.IsEmpty())
   {
-    AfxMessageBox(_T("변경할 이름을 입력해주세요"));
+    AfxMessageBox(Lang::T(IDS_MSG_ENTER_NAME));
     return;
   }
 

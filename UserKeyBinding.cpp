@@ -1,6 +1,7 @@
 ﻿// clang-format off
 #include "pch.h"
 #include "UserKeyBinding.hpp"
+#include "UserLanguage.hpp"
 #include <vector>
 // clang-format on
 
@@ -73,7 +74,7 @@ void BuildActiveHotkeyEntries(int preset_count, std::vector<ActiveHotkeyEntry>* 
   {
     DWORD toggle_hotkey = GetToggleHotkey();
     if (HotkeyVK(toggle_hotkey) != 0)
-      entries->push_back({ toggle_hotkey, _T("프리셋 토글") });
+      entries->push_back({ toggle_hotkey, Lang::T(IDS_LBL_PRESET_TOGGLE) });
   }
 }
 }  // namespace
@@ -97,7 +98,7 @@ CString HotkeyToString(DWORD hotkey_value, bool with_not_set_placeholder)
 {
   const UINT vk = HotkeyVK(hotkey_value);
   if (vk == 0)
-    return with_not_set_placeholder ? _T("(미설정)") : _T("");
+    return with_not_set_placeholder ? Lang::T(IDS_LBL_HOTKEY_NOT_SET) : CString();
 
   CString result = ModifierToString(HotkeyModifiers(hotkey_value));
   result += KeyToString(vk);
@@ -213,7 +214,7 @@ bool ValidateActiveHotkeys(int preset_count, CString* conflict_message)
         if (conflict_message)
         {
           conflict_message->Format(
-              _T("활성화된 단축키 설정에 중복이 있습니다.\r\n'%s' 와 '%s'가 동일한 단축키(%s)를 사용 중입니다."),
+              Lang::T(IDS_FMT_HOTKEY_DUPLICATE),
               (LPCTSTR)entries[i].desc,
               (LPCTSTR)entries[j].desc,
               (LPCTSTR)HotkeyToString(entries[i].hotkey, true));
@@ -365,7 +366,7 @@ HotkeyValidation ValidateHotkeyCandidate(int preset_count, DWORD hotkey_value,
   if (hotkey_value == reserved_debug_hotkey)
   {
     result.ok            = false;
-    result.error_message = _T("Ctrl+Alt+F12는 사용할 수 없는 단축키입니다.\r\n다른 단축키를 입력하세요.");
+    result.error_message = Lang::T(IDS_MSG_HOTKEY_RESERVED);
     return result;
   }
 
@@ -375,7 +376,7 @@ HotkeyValidation ValidateHotkeyCandidate(int preset_count, DWORD hotkey_value,
                                          &duplicate_desc))
   {
     result.ok = false;
-    result.error_message.Format(_T("이미 '%s'에 등록된 단축키입니다.\r\n다른 단축키를 입력하세요."),
+    result.error_message.Format(Lang::T(IDS_FMT_HOTKEY_ALREADY_USED),
                                 (LPCTSTR)duplicate_desc);
     return result;
   }

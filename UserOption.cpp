@@ -1,6 +1,7 @@
 ﻿// clang-format off
 #include "pch.h"
 #include "UserDefine.hpp"
+#include "UserLanguage.hpp"
 #include "UserOption.hpp"
 #include <memory>
 // clang-format on
@@ -42,6 +43,7 @@ bool InitializeOptionValues()
     res &= GLOBAL_OPTION.setInit(KEY_FILTERKEY_BACKUP_DELAY, static_cast<DWORD>(DEFAULT_REPEAT_DELAY));
     res &= GLOBAL_OPTION.setInit(KEY_FILTERKEY_BACKUP_REPEAT, static_cast<DWORD>(DEFAULT_REPEAT_RATE));
     res &= GLOBAL_OPTION.setInit(KEY_FILTERKEY_BACKUP_FLAGS, static_cast<DWORD>(WINDOW_FILTER_FLAG));
+    res &= GLOBAL_OPTION.setInit(KEY_LANGUAGE, static_cast<DWORD>(Lang::DetectSystemDefault()));
   }
 
   // Preset Generator
@@ -65,12 +67,12 @@ bool InitializeOptionValues()
     }
   };
 
-  InitPreset(PRESET_OFF, CString(_T("끄기")), 500, 33, WINDOW_FILTER_FLAG);     // Rename Preset OFF
-  InitPreset(PRESET_OFF + 1, CString(_T("켜기")), 90, 14, CUSTOM_FILTER_FLAG);  // Rename Default Preset
+  InitPreset(PRESET_OFF, Lang::T(IDS_PRESET_NAME_OFF), 500, 33, WINDOW_FILTER_FLAG);    // Rename Preset OFF
+  InitPreset(PRESET_OFF + 1, Lang::T(IDS_PRESET_NAME_ON), 90, 14, CUSTOM_FILTER_FLAG);  // Rename Default Preset
   for (int preset_number = 2; preset_number < PRESET_MAX_COUNT; ++preset_number)
   {
     CString title;
-    title.Format(_T("프리셋 %d"), preset_number);
+    title.Format(Lang::T(IDS_FMT_PRESET_DEFAULT_NAME), preset_number);
     InitPreset(preset_number, title, 500, 33, CUSTOM_FILTER_FLAG);
   }
 
