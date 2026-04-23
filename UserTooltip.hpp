@@ -2,7 +2,10 @@
 
 #include <afxcmn.h>
 
+#include <list>
+
 #include "UserDefine.hpp"
+#include "UserLanguage.hpp"
 #include "resource.h"
 
 class Tooltip
@@ -62,10 +65,16 @@ class Tooltip
     control_.SetDelayTime(TTDT_RESHOW, 120);
     control_.SetDelayTime(TTDT_AUTOPOP, 15000);
 
+    // std::list 사용: 요소 추가 시 기존 요소 주소가 무효화되지 않음 (툴팁이 포인터를 장기 보유).
+    tooltip_texts_.clear();
+
     for (int index = 0; index < _countof(TOOLTIP_TABLE); ++index)
     {
       if (auto* control = owner->GetDlgItem(TOOLTIP_TABLE[index].control_id); control)
-        control_.AddTool(control, TOOLTIP_TABLE[index].ids);
+      {
+        tooltip_texts_.emplace_back(Lang::T(TOOLTIP_TABLE[index].ids));
+        control_.AddTool(control, static_cast<LPCTSTR>(tooltip_texts_.back()));
+      }
     }
 
     return true;
@@ -75,7 +84,10 @@ class Tooltip
   void RegisterPreset(CWnd* button)
   {
     if (button)
-      control_.AddTool(button, IDS_TIP_PRESET_BUTTON);
+    {
+      tooltip_texts_.emplace_back(Lang::T(IDS_TIP_PRESET_BUTTON));
+      control_.AddTool(button, static_cast<LPCTSTR>(tooltip_texts_.back()));
+    }
   }
 
   // Message relay
@@ -86,5 +98,6 @@ class Tooltip
   }
 
  private:
-  CToolTipCtrl control_;
+  CToolTipCtrl       control_;
+  std::list<CString> tooltip_texts_;  // 포인터 안정성을 위해 list 사용
 };
