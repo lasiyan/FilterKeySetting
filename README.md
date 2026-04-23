@@ -75,7 +75,7 @@ Get-FileHash .\FilterKeySetting.exe -Algorithm SHA256
 - 단축키는 타 프로그램과 중복 시 동작하지 않을 수 있습니다.
    > 예를들어 MapleStory에서 F1에 스킬을 올리고, 토글키를 F1로 설정하는 경우 스킬이 나가지 않을 수 있음
 
-상세 문서: [보안/운영 주의 사항](SECURITY)
+상세 문서: [보안/운영 주의 사항](SECURITY.md)
 
 
 
