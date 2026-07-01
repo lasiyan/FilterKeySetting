@@ -30,6 +30,7 @@
 #define IDS_CHK_ENABLE_KEYBIND          225
 #define IDS_CHK_DISABLE_WITH_ESC        226
 #define IDS_LBL_KEYBIND_GUIDE           227
+#define IDS_BTN_CLEAR_APP_DATA          228
 #define IDS_CHK_DBG_MOVE_TRACKER        250
 #define IDS_LBL_PRESET_COUNT            251
 #define IDS_GRP_EXPERIMENTAL            252
@@ -63,6 +64,8 @@
 #define IDS_MSG_REGISTRY_CREATE_FAIL    310
 #define IDS_MSG_CONFIRM_SAVE_UNSAVED    311
 #define IDS_MSG_FULLSCREEN_GAME_WARNING 312
+#define IDS_MSG_CLEAR_APP_DATA_TITLE    313
+#define IDS_MSG_CLEAR_APP_DATA_CONFIRM  314
 #define IDS_FMT_WINDOW_TITLE_ACTIVE     400
 #define IDS_FMT_PRESET_COUNT_RESTART    401
 #define IDS_FMT_ADMIN_REQUIRED          402
@@ -102,6 +105,10 @@
 #define IDS_TIP_EDIT_PRESET_OFF_PROCESS 523
 #define IDS_TIP_CHECK_IF_FULL_SCREEN_GAME 524
 #define IDS_TIP_PRESET_BUTTON           525
+#define IDS_TIP_EDIT_TOGGLE_KEYBIND     526
+#define IDS_TIP_CHECK_MOVE_TO_TRAY      527
+#define IDS_TIP_COMBO_DBG_PRESET_COUNT  528
+#define IDS_TIP_CHECK_DISABLE_HOTKEY    529
 #define IDS_LBL_VERY_LOW                550
 #define IDS_LBL_LOW                     551
 #define IDS_LBL_NORMAL                  552
@@ -116,6 +123,7 @@
 #define IDS_FLT_EXE_FILES               561
 #define IDS_LBL_PRESET_TOGGLE           562
 #define IDS_LBL_HOTKEY_NOT_SET          563
+#define IDS_LBL_INFO_HINT               564
 #define IDC_BTN_PRESET_OFF              1000
 #define IDC_BTN_PRESET1                 1001
 #define IDC_BTN_PRESET2                 1002
@@ -176,6 +184,9 @@
 #define IDC_STATIC_EXPERIMENTAL_GROUP   1134
 #define IDC_STATIC_MOVE_SENSITIVITY_LABEL 1135
 #define IDC_STATIC_PROCESS_LABEL        1136
+#define IDC_STATIC_INFO_HINT            1137
+#define IDC_BUTTON1                     1138
+#define IDC_BTN_CLEAR_APP_DATA          1138
 #define IDM_TRAY_OPEN                   50001
 #define IDM_TRAY_EXIT                   50002
 #define IDM_TRAY_PRESET_BASE            50100
@@ -186,7 +197,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        138
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1137
+#define _APS_NEXT_CONTROL_VALUE         1139
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

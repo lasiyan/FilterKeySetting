@@ -29,12 +29,17 @@ constexpr std::array<AdminRequiredOption, 7> kAdminRequiredOptions = {
   AdminRequiredOption{ KEY_PROCESS_OFF_ENABLED, IDS_CHK_PRESET_OFF_PROCESS },
 };
 
+CString StripStarPrefix(const CString& s)
+{
+  return (s.GetLength() >= 2 && s.Left(2) == _T("★ ")) ? s.Mid(2) : s;
+}
+
 CString FindOptionLabel(const CString& option_key)
 {
   for (const auto& option : kAdminRequiredOptions)
   {
     if (option_key.Compare(option.key) == 0)
-      return Lang::T(option.label_ids);
+      return StripStarPrefix(Lang::T(option.label_ids));
   }
 
   return CString();
@@ -63,7 +68,7 @@ CString BuildEnabledOptionSummary()
       summary += _T("\r\n");
 
     summary += _T("- ");
-    summary += Lang::T(option.label_ids);
+    summary += StripStarPrefix(Lang::T(option.label_ids));
   }
 
   return summary;

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <windows.h>
 
@@ -8,6 +8,7 @@ enum class MouseTrackerTrigger : WPARAM
 {
   MoveDistance = 1,
   DoubleClick  = 2,
+  RightClick   = 3,
 };
 
 class MouseTracker
@@ -28,7 +29,7 @@ class MouseTracker
   // Activation
   bool Activate();
   void Deactivate();
-  void SetTriggerOptions(bool enable_move, bool enable_double_click);
+  void SetTriggerOptions(bool enable_move, bool enable_double_click, bool enable_right_click);
   void SetDistanceTarget(DWORD distance_px) { distance_target_px_ = distance_px; }
   void RequestReset() { reset_pending_.store(true); }
 
@@ -64,6 +65,7 @@ class MouseTracker
   ULONGLONG         moved_distance_px_         = 0;
   ULONGLONG         last_move_ms_              = 0;
   bool              last_left_button_down_     = false;
+  bool              last_right_button_down_    = false;
   bool              has_last_click_            = false;
   POINT             last_click_pos_            = { 0, 0 };
   ULONGLONG         last_click_ms_             = 0;
@@ -71,6 +73,7 @@ class MouseTracker
   ULONGLONG         background_since_ms_       = 0;
   std::atomic<bool> enable_move_trigger_{ false };
   std::atomic<bool> enable_double_click_trigger_{ false };
+  std::atomic<bool> enable_right_click_trigger_{ false };
   std::atomic<bool> reset_pending_{ false };
   bool              in_background_ = false;
 };

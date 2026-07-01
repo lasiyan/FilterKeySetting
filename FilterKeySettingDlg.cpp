@@ -21,6 +21,8 @@
 #include "UserPresetService.hpp"
 #include "UserLanguage.hpp"
 #include <algorithm>
+#include <shlwapi.h>
+#pragma comment(lib, "shlwapi.lib")
 // clang-format on
 
 namespace {
@@ -137,6 +139,7 @@ ON_MESSAGE(WM_MOUSE_TRACKER_TRIGGERED, &CFilterKeySettingDlg::OnMouseTrackerTrig
 ON_MESSAGE(WM_DEV_DEBUG_CLOSED, &CFilterKeySettingDlg::OnDebugDialogClosed)
 ON_MESSAGE(WM_DEV_DEBUG_OPTIONS_CHANGED, &CFilterKeySettingDlg::OnDebugOptionsChanged)
 ON_MESSAGE(CFilterKeySettingDlg::WM_ACTIVATE_EXISTING_INST, &CFilterKeySettingDlg::OnActivateExisting)
+ON_MESSAGE(CFilterKeySettingDlg::WM_CLEAR_APP_DATA_AND_EXIT, &CFilterKeySettingDlg::OnClearAppDataAndExit)
 ON_COMMAND_RANGE(CFilterKeySettingDlg::dynamic_preset_button_base_,
                  CFilterKeySettingDlg::dynamic_preset_button_base_ + PRESET_MAX_COUNT - 1,
                  &CFilterKeySettingDlg::OnCommandPresetButton)
@@ -145,7 +148,7 @@ ON_EN_KILLFOCUS(IDC_EDIT_TESTING, &CFilterKeySettingDlg::OnEnKillFocusTesting)
 ON_EN_SETFOCUS(IDC_EDIT_TOGGLE_KEYBIND, &CFilterKeySettingDlg::OnEnSetFocusToggleKeybind)
 ON_BN_CLICKED(IDC_CHECK_EDIT_MODE, &CFilterKeySettingDlg::OnBnClickedCheckEditMode)
 ON_BN_CLICKED(IDC_CHECK_RESTORE_SETTING, &CFilterKeySettingDlg::OnBnClickedCheckRestoreSetting)
-ON_BN_CLICKED(IDC_CHECK_DISABLE_HOTKEY, &CFilterKeySettingDlg::OnBnClickedCheckDisableHotkey)
+
 ON_BN_CLICKED(IDC_CHECK_MOVE_TO_TRAY, &CFilterKeySettingDlg::OnBnClickedCheckMoveToTray)
 ON_BN_CLICKED(IDC_CHECK_ENABLE_KEYBIND, &CFilterKeySettingDlg::OnBnClickedCheckEnableKeybind)
 ON_BN_CLICKED(IDC_CHECK_ENABLE_TOGGLE_KEYBIND, &CFilterKeySettingDlg::OnBnClickedCheckEnableToggleKeybind)
@@ -201,12 +204,12 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   // Apply localized text for non-Korean languages
   static constexpr Lang::ControlTextEntry kMainDlgTexts[] = {
     { IDC_CHECK_RESTORE_SETTING, IDS_CHK_RESTORE_SETTING },
-    { IDC_CHECK_DISABLE_HOTKEY, IDS_CHK_DISABLE_HOTKEY },
     { IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER, IDS_CHK_MOUSE_DBLCLICK_TRACKER },
     { IDC_CHECK_ENABLE_TOGGLE_KEYBIND, IDS_CHK_TOGGLE_KEYBIND },
     { IDC_CHECK_MOVE_TO_TRAY, IDS_CHK_MOVE_TO_TRAY },
     { IDC_CHECK_ENABLE_KEYBIND, IDS_CHK_ENABLE_KEYBIND },
     { IDC_CHECK_DISABLE_WITH_ESC, IDS_CHK_DISABLE_WITH_ESC },
+    { IDC_STATIC_INFO_HINT, IDS_LBL_INFO_HINT },
   };
   Lang::ApplyControlTexts(this, kMainDlgTexts, _countof(kMainDlgTexts));
 
@@ -406,7 +409,17 @@ HBRUSH CFilterKeySettingDlg::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 {
   HBRUSH brush = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
 
-  if (!pWnd || !edit_mode_hint_label_ready_)
+  if (!pWnd)
+    return brush;
+
+  if (nCtlColor == CTLCOLOR_STATIC && pWnd->GetDlgCtrlID() == IDC_STATIC_INFO_HINT)
+  {
+    pDC->SetBkMode(TRANSPARENT);
+    pDC->SetTextColor(RGB(216, 84, 0));
+    return (HBRUSH)GetStockObject(NULL_BRUSH);
+  }
+
+  if (!edit_mode_hint_label_ready_)
     return brush;
 
   if (!::IsWindow(edit_mode_hint_label_.GetSafeHwnd()))
@@ -492,7 +505,8 @@ LRESULT CFilterKeySettingDlg::OnMouseTrackerTriggered(WPARAM wParam, LPARAM lPar
     if (GLOBAL_OPTION.getInteger(KEY_ENABLE_MOUSE_MOVE_TRACKER) == 0)
       return 0;
   }
-  else if (trigger == MouseTrackerTrigger::DoubleClick)
+  else if (trigger == MouseTrackerTrigger::DoubleClick ||
+           trigger == MouseTrackerTrigger::RightClick)
   {
     if (GLOBAL_OPTION.getInteger(KEY_ENABLE_MOUSE_DBLCLICK_TRACKER) == 0)
       return 0;
@@ -508,7 +522,9 @@ LRESULT CFilterKeySettingDlg::OnMouseTrackerTriggered(WPARAM wParam, LPARAM lPar
 
   ResetEditMode();
   ActivatePreset(PRESET_OFF, FALSE, TRUE,
-                 trigger == MouseTrackerTrigger::MoveDistance ? _T("Mouse Move tracker") : _T("Mouse D-Click tracker"));
+                 trigger == MouseTrackerTrigger::MoveDistance ? _T("Mouse Move tracker") :
+                 trigger == MouseTrackerTrigger::RightClick   ? _T("Mouse R-Click tracker") :
+                                                                _T("Mouse D-Click tracker"));
   return 0;
 }
 
@@ -526,6 +542,32 @@ LRESULT CFilterKeySettingDlg::OnActivateExisting(WPARAM wParam, LPARAM lParam)
     BringDialogToForeground();
   }
 
+  return 0;
+}
+
+LRESULT CFilterKeySettingDlg::OnClearAppDataAndExit(WPARAM wParam, LPARAM lParam)
+{
+  UNREFERENCED_PARAMETER(wParam);
+  UNREFERENCED_PARAMETER(lParam);
+
+  // 데이터 초기화이므로 KEY_RESTORE_SETTING 옵션과 무관하게 필터키를 항상 OFF로 복원한다.
+  // (레지스트리 삭제 후에는 OnDestroy에서 옵션을 읽을 수 없으므로 여기서 먼저 복원)
+  ActivatePreset(PRESET_OFF, FALSE, FALSE, _T("Clear app data (restore off)"));
+
+  // 레지스트리(설정) + 자동시작 항목 삭제
+  ::SHDeleteKey(HKEY_CURRENT_USER, USER_REGISTRY_PATH);
+
+  static constexpr LPCTSTR kRunPath = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+  HKEY hKey = nullptr;
+  if (::RegOpenKeyEx(HKEY_CURRENT_USER, kRunPath, 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+  {
+    ::RegDeleteValue(hKey, GetAppName());
+    ::RegCloseKey(hKey);
+  }
+
+  // 정상 종료 시퀀스 (X 버튼 / 트레이 종료와 동일)
+  RemoveTrayIcon();
+  PostMessage(WM_CLOSE);
   return 0;
 }
 
@@ -954,10 +996,6 @@ void CFilterKeySettingDlg::OnBnClickedCheckRestoreSetting()
   UpdateOption();  //
 }
 
-void CFilterKeySettingDlg::OnBnClickedCheckDisableHotkey()
-{
-  UpdateOption();  //
-}
 
 void CFilterKeySettingDlg::OnBnClickedCheckMoveToTray()
 {
@@ -1400,16 +1438,6 @@ void CFilterKeySettingDlg::SyncOptionsFromUI()
     GLOBAL_OPTION.set(KEY_RESTORE_SETTING, static_cast<DWORD>(checked));
   }
 
-  {
-    btn          = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DISABLE_HOTKEY));
-    auto checked = btn ? btn->GetCheck() : false;
-    GLOBAL_OPTION.set(KEY_DISABLE_HOTKEY, static_cast<DWORD>(checked));
-
-    PresetOption option(PRESET_OFF);
-    DWORD        value = checked ? WINDOW_FILTER_FLAG & ~(FKF_HOTKEYACTIVE | FKF_CONFIRMHOTKEY | FKF_HOTKEYSOUND)
-                                 : WINDOW_FILTER_FLAG;
-    option.set(KEY_FILTER_FLAG, value);
-  }
 
   {
     btn          = static_cast<CButton*>(GetDlgItem(IDC_CHECK_MOVE_TO_TRAY));
@@ -1456,7 +1484,7 @@ void CFilterKeySettingDlg::SyncOptionsToUI()
   };
 
   SetCheck(IDC_CHECK_RESTORE_SETTING, KEY_RESTORE_SETTING);
-  SetCheck(IDC_CHECK_DISABLE_HOTKEY, KEY_DISABLE_HOTKEY);
+
   SetCheck(IDC_CHECK_MOVE_TO_TRAY, KEY_MOVE_TO_TRAY);
   SetCheck(IDC_CHECK_ENABLE_KEYBIND, KEY_ENABLE_KEYBIND);
   SetCheck(IDC_CHECK_ENABLE_TOGGLE_KEYBIND, KEY_ENABLE_TOGGLE_KEYBIND);
@@ -1484,7 +1512,7 @@ void CFilterKeySettingDlg::ApplySubsystemOptions()
       const auto             sens               = static_cast<int>(GLOBAL_OPTION.getInteger(KEY_MOUSE_MOVE_SENSITIVITY, 2));
       const DWORD            dist               = kSensitivityToPx[(sens >= 0 && sens <= 4) ? sens : 2];
       mouse_tracker_.SetDistanceTarget(dist);
-      mouse_tracker_.SetTriggerOptions(move_enabled, dbl_enabled);
+      mouse_tracker_.SetTriggerOptions(move_enabled, dbl_enabled, dbl_enabled);
       mouse_tracker_.Activate();
     }
   }
@@ -1925,12 +1953,12 @@ void CFilterKeySettingDlg::LayoutDynamicControls()
     IDC_EDIT_TESTING,
     IDC_CHECK_RESTORE_SETTING,
     IDC_CHECK_MOVE_TO_TRAY,
-    IDC_CHECK_DISABLE_HOTKEY,
     IDC_CHECK_ENABLE_KEYBIND,
     IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER,
     IDC_CHECK_DISABLE_WITH_ESC,
     IDC_CHECK_ENABLE_TOGGLE_KEYBIND,
     IDC_EDIT_TOGGLE_KEYBIND,
+    IDC_STATIC_INFO_HINT,
   };
 
   bool  lower_initialized = false;

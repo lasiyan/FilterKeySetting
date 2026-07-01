@@ -1,4 +1,4 @@
-﻿// clang-format off
+// clang-format off
 #include "pch.h"
 #include "UserMouseTracker.hpp"
 #include "UserDefine.hpp"
@@ -93,10 +93,11 @@ void MouseTracker::Deactivate()
   ResetTracking();
 }
 
-void MouseTracker::SetTriggerOptions(bool enable_move, bool enable_double_click)
+void MouseTracker::SetTriggerOptions(bool enable_move, bool enable_double_click, bool enable_right_click)
 {
   enable_move_trigger_.store(enable_move);
   enable_double_click_trigger_.store(enable_double_click);
+  enable_right_click_trigger_.store(enable_right_click);
 }
 
 VOID CALLBACK MouseTracker::TimerProc(PVOID lpParameter, BOOLEAN /*TimerOrWaitFired*/)
@@ -121,7 +122,8 @@ void MouseTracker::Tick()
 
   const bool enable_move         = enable_move_trigger_.load();
   const bool enable_double_click = enable_double_click_trigger_.load();
-  if (!enable_move && !enable_double_click)
+  const bool enable_right_click  = enable_right_click_trigger_.load();
+  if (!enable_move && !enable_double_click && !enable_right_click)
     return;
 
   if (IsOwnerForeground())
@@ -137,23 +139,26 @@ void MouseTracker::Tick()
 
   const ULONGLONG now = NowMs();
 
-  const bool left_button_down = (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+  const bool left_button_down  = (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+  const bool right_button_down = (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 
   if (!in_background_)
   {
-    in_background_         = true;
-    background_since_ms_   = now;
-    has_last_cursor_pos_   = true;
-    last_cursor_pos_       = pt;
-    last_left_button_down_ = left_button_down;
+    in_background_           = true;
+    background_since_ms_     = now;
+    has_last_cursor_pos_     = true;
+    last_cursor_pos_         = pt;
+    last_left_button_down_   = left_button_down;
+    last_right_button_down_  = right_button_down;
     return;
   }
 
   if (now - background_since_ms_ < arm_delay_ms_)
   {
-    has_last_cursor_pos_   = true;
-    last_cursor_pos_       = pt;
-    last_left_button_down_ = left_button_down;
+    has_last_cursor_pos_    = true;
+    last_cursor_pos_        = pt;
+    last_left_button_down_  = left_button_down;
+    last_right_button_down_ = right_button_down;
     return;
   }
 
@@ -220,7 +225,21 @@ void MouseTracker::Tick()
     }
   }
 
-  last_left_button_down_ = left_button_down;
+  if (enable_right_click && right_button_down && !last_right_button_down_)
+  {
+    if (now >= trigger_cooldown_until_ms_)
+    {
+      if (::IsWindow(owner_wnd_))
+        ::PostMessage(owner_wnd_, WM_MOUSE_TRACKER_TRIGGERED,
+                      static_cast<WPARAM>(MouseTrackerTrigger::RightClick), 0);
+
+      trigger_cooldown_until_ms_ = now + 1000;
+      moved_distance_px_         = 0;
+    }
+  }
+
+  last_left_button_down_  = left_button_down;
+  last_right_button_down_ = right_button_down;
 }
 
 void MouseTracker::ResetTracking()
@@ -229,6 +248,7 @@ void MouseTracker::ResetTracking()
   moved_distance_px_         = 0;
   last_move_ms_              = 0;
   last_left_button_down_     = false;
+  last_right_button_down_    = false;
   has_last_click_            = false;
   last_click_ms_             = 0;
   trigger_cooldown_until_ms_ = 0;

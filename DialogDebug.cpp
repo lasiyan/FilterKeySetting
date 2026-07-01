@@ -7,6 +7,7 @@
 #include "UserLanguage.hpp"
 #include "UserPresetOSD.hpp"
 #include "afxdialogex.h"
+#include "FilterKeySettingDlg.h"
 #include <shellapi.h>
 // clang-format on
 
@@ -45,8 +46,10 @@ ON_BN_CLICKED(IDC_CHECK_AUTO_START, &DialogDebug::OnBnClickedCheckAutoStart)
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS, &DialogDebug::OnBnClickedCheckPresetOffProcess)
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, &DialogDebug::OnBnClickedCheckPresetOffProcessRestore)
 ON_BN_CLICKED(IDC_CHECK_IF_FULL_SCREEN_GAME, &DialogDebug::OnBnClickedCheckIfFullScreenGame)
+ON_BN_CLICKED(IDC_CHECK_DISABLE_HOTKEY, &DialogDebug::OnBnClickedCheckDisableHotkey)
 ON_EN_KILLFOCUS(IDC_EDIT_PRESET_OFF_PROCESS, &DialogDebug::OnEnKillFocusEditPresetOffProcess)
 ON_CBN_SELCHANGE(IDC_COMBO_LANG, &DialogDebug::OnCbnSelchangeComboLang)
+ON_BN_CLICKED(IDC_BTN_CLEAR_APP_DATA, &DialogDebug::OnBnClickedBtnClearAppData)
 END_MESSAGE_MAP()
 
 BOOL DialogDebug::OnInitDialog()
@@ -77,6 +80,7 @@ BOOL DialogDebug::OnInitDialog()
     { IDC_CHECK_MUTE_SOUND, IDS_CHK_MUTE_SOUND },
     { IDC_CHECK_OFF_USE_WINDOWS_DEFAULT, IDS_CHK_OFF_USE_WINDOWS_DEFAULT },
     { IDC_CHECK_IF_FULL_SCREEN_GAME, IDS_CHK_IF_FULL_SCREEN_GAME },
+    { IDC_CHECK_DISABLE_HOTKEY, IDS_CHK_DISABLE_HOTKEY },
     { IDC_STATIC_MOVE_SENSITIVITY_LABEL, IDS_LBL_MOVE_SENSITIVITY },
     { IDC_CHECK_AUTO_START, IDS_CHK_AUTO_START },
     { IDC_CHECK_ENABLE_PRESET_OSD, IDS_CHK_ENABLE_PRESET_OSD },
@@ -89,6 +93,7 @@ BOOL DialogDebug::OnInitDialog()
     { IDC_CHECK_PRESET_OFF_PROCESS, IDS_CHK_PRESET_OFF_PROCESS },
     { IDC_STATIC_PROCESS_LABEL, IDS_LBL_PROCESS },
     { IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, IDS_CHK_PRESET_OFF_PROCESS_RESTORE },
+    { IDC_BTN_CLEAR_APP_DATA, IDS_BTN_CLEAR_APP_DATA },
   };
   Lang::ApplyCaption(this, IDS_DLG_DEBUG_TITLE);
   Lang::ApplyControlTexts(this, kDebugDlgTexts, _countof(kDebugDlgTexts));
@@ -248,6 +253,12 @@ void DialogDebug::InitializeOptions()
   {
     const bool checked = (GLOBAL_OPTION.getInteger(KEY_IF_FULL_SCREEN_GAME, 0) != 0);
     full_screen->SetCheck(checked ? BST_CHECKED : BST_UNCHECKED);
+  }
+
+  if (auto* disable_hotkey = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DISABLE_HOTKEY)); disable_hotkey)
+  {
+    const bool checked = (GLOBAL_OPTION.getInteger(KEY_DISABLE_HOTKEY, 0) != 0);
+    disable_hotkey->SetCheck(checked ? BST_CHECKED : BST_UNCHECKED);
   }
 
   if (auto* combo = static_cast<CComboBox*>(GetDlgItem(IDC_COMBO_LANG)); combo)
@@ -422,6 +433,26 @@ void DialogDebug::OnBnClickedCheckAutoStart()
   ::RegCloseKey(hKey);
 }
 
+void DialogDebug::OnBnClickedBtnClearAppData()
+{
+  const bool ctrl_down = ((::GetKeyState(VK_CONTROL) & 0x8000) != 0) ||
+                         ((::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+  if (!ctrl_down)
+    return;
+
+  const int ret = MessageBox(Lang::T(IDS_MSG_CLEAR_APP_DATA_CONFIRM),
+                             Lang::T(IDS_MSG_CLEAR_APP_DATA_TITLE),
+                             MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+  if (ret != IDYES)
+    return;
+
+  DevLog::Write(_T("[ClearAppData] Requested. Delegating to main window for filter-key restore + exit."));
+
+  // 필터키 복원·데이터 삭제·종료는 메인 다이얼로그가 소유한다 (X 버튼 종료와 동일 시퀀스).
+  if (CWnd* parent = GetParent(); parent && ::IsWindow(parent->GetSafeHwnd()))
+    parent->PostMessage(CFilterKeySettingDlg::WM_CLEAR_APP_DATA_AND_EXIT);
+}
+
 void DialogDebug::InitializeProcessOffOptions()
 {
   const bool enabled = (GLOBAL_OPTION.getInteger(KEY_PROCESS_OFF_ENABLED) != 0);
@@ -522,6 +553,25 @@ void DialogDebug::OnBnClickedCheckIfFullScreenGame()
   const bool is_elevated = FilterKey::IsProcessElevatedNow();
   DevLog::Writef(_T("Option changed: fullscreen game raw input mode = %d (admin=%d)"),
                  request_enable ? 1 : 0, is_elevated ? 1 : 0);
+  NotifyOptionsChanged();
+}
+
+void DialogDebug::OnBnClickedCheckDisableHotkey()
+{
+  auto* check = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DISABLE_HOTKEY));
+  if (!check)
+    return;
+
+  const bool checked = (check->GetCheck() == BST_CHECKED);
+
+  GLOBAL_OPTION.set(KEY_DISABLE_HOTKEY, static_cast<DWORD>(checked));
+
+  PresetOption option(PRESET_OFF);
+  DWORD        value = checked ? WINDOW_FILTER_FLAG & ~(FKF_HOTKEYACTIVE | FKF_CONFIRMHOTKEY | FKF_HOTKEYSOUND)
+                               : WINDOW_FILTER_FLAG;
+  option.set(KEY_FILTER_FLAG, value);
+
+  DevLog::Writef(_T("Option changed: disable hotkey = %d"), checked ? 1 : 0);
   NotifyOptionsChanged();
 }
 

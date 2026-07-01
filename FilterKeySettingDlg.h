@@ -47,6 +47,7 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg LRESULT OnDebugDialogClosed(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnDebugOptionsChanged(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnActivateExisting(WPARAM wParam, LPARAM lParam);
+  afx_msg LRESULT OnClearAppDataAndExit(WPARAM wParam, LPARAM lParam);
   BOOL            PreTranslateMessage(MSG* pMsg) override;
   DECLARE_MESSAGE_MAP()
 
@@ -54,7 +55,6 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg void OnCommandPresetButton(UINT nID);
   afx_msg void OnBnClickedCheckEditMode();
   afx_msg void OnBnClickedCheckRestoreSetting();
-  afx_msg void OnBnClickedCheckDisableHotkey();
   afx_msg void OnBnClickedCheckMoveToTray();
   afx_msg void OnBnClickedCheckEnableKeybind();
   afx_msg void OnBnClickedCheckEnableToggleKeybind();
@@ -137,6 +137,7 @@ class CFilterKeySettingDlg : public CDialogEx
   // Message IDs and timer IDs
  public:
   static constexpr UINT     WM_TRAYICON_MSG             = WM_APP + 1;
+  static constexpr UINT     WM_CLEAR_APP_DATA_AND_EXIT  = WM_APP + 62;
   static constexpr UINT     WM_ACTIVATE_EXISTING_INST   = WM_APP + 100;
   static constexpr UINT_PTR TIMER_BG_ESC_WATCH          = 0x12F1;
   static constexpr UINT_PTR TIMER_PROCESS_WATCHER       = 0x12F2;
