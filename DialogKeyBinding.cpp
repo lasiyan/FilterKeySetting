@@ -12,6 +12,29 @@
 
 IMPLEMENT_DYNAMIC(DialogKeyBinding, CDialogEx)
 
+namespace {
+// 게임에서 고정으로 사용되는 단독(수정키 없는) 키: 핫키로 등록하면 RegisterHotKey가
+// 전역에서 가로채 게임 내 원래 기능이 동작하지 않으므로 적용 전 경고 대상으로 판단한다.
+bool IsGameReservedStandaloneKey(DWORD hotkey_value)
+{
+  if (KeyBinding::HotkeyModifiers(hotkey_value) != 0)
+    return false;
+
+  switch (KeyBinding::HotkeyVK(hotkey_value))
+  {
+    case VK_ESCAPE:
+    case VK_SCROLL:    // ScrLk
+    case VK_RETURN:    // Enter
+    case VK_TAB:
+    case VK_SNAPSHOT:  // PrtSc
+    case VK_PAUSE:     // Pause/Break
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
 DialogKeyBinding::DialogKeyBinding(DWORD current_hotkey, CWnd* pParent)
     : CDialogEx(IDD_KEY_BINDING, pParent), hotkey_value_(current_hotkey)
 {
@@ -54,12 +77,6 @@ BOOL DialogKeyBinding::PreTranslateMessage(MSG* pMsg)
   {
     const UINT vk = static_cast<UINT>(pMsg->wParam);
 
-    if (vk == VK_RETURN)
-    {
-      CDialogEx::OnOK();
-      return TRUE;
-    }
-
     if (vk == VK_BACK)
     {
       ClearHotkey();
@@ -78,6 +95,17 @@ BOOL DialogKeyBinding::PreTranslateMessage(MSG* pMsg)
   }
 
   return CDialogEx::PreTranslateMessage(pMsg);
+}
+
+void DialogKeyBinding::OnOK()
+{
+  if (IsGameReservedStandaloneKey(hotkey_value_))
+  {
+    if (AfxMessageBox(Lang::T(IDS_MSG_HOTKEY_GAME_RESERVED), MB_YESNO | MB_ICONWARNING) != IDYES)
+      return;
+  }
+
+  CDialogEx::OnOK();
 }
 
 void DialogKeyBinding::SetHotkeyValue(UINT vk, UINT modifiers)

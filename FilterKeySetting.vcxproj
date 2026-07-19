@@ -228,6 +228,7 @@ powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\Generate-Rel
     <ClInclude Include="targetver.h" />
     <ClInclude Include="UserFilterKey.hpp" />
     <ClInclude Include="UserAdminGuard.hpp" />
+    <ClInclude Include="UserAutoStart.hpp" />
     <ClInclude Include="UserDefine.hpp" />
     <ClInclude Include="UserDevLog.hpp" />
     <ClInclude Include="UserKeyBinding.hpp" />

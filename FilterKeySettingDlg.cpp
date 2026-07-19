@@ -12,6 +12,7 @@
 #include "DialogKeyBinding.h"
 #include "DialogDebug.h"
 #include "DialogRename.h"
+#include "UserAutoStart.hpp"
 #include "UserDevLog.hpp"
 #include "UserFilterKey.hpp"
 #include "UserKeyBinding.hpp"
@@ -140,6 +141,7 @@ ON_MESSAGE(WM_DEV_DEBUG_CLOSED, &CFilterKeySettingDlg::OnDebugDialogClosed)
 ON_MESSAGE(WM_DEV_DEBUG_OPTIONS_CHANGED, &CFilterKeySettingDlg::OnDebugOptionsChanged)
 ON_MESSAGE(CFilterKeySettingDlg::WM_ACTIVATE_EXISTING_INST, &CFilterKeySettingDlg::OnActivateExisting)
 ON_MESSAGE(CFilterKeySettingDlg::WM_CLEAR_APP_DATA_AND_EXIT, &CFilterKeySettingDlg::OnClearAppDataAndExit)
+ON_MESSAGE(CFilterKeySettingDlg::WM_START_MINIMIZED_TO_TRAY, &CFilterKeySettingDlg::OnStartMinimizedToTray)
 ON_COMMAND_RANGE(CFilterKeySettingDlg::dynamic_preset_button_base_,
                  CFilterKeySettingDlg::dynamic_preset_button_base_ + PRESET_MAX_COUNT - 1,
                  &CFilterKeySettingDlg::OnCommandPresetButton)
@@ -154,6 +156,7 @@ ON_BN_CLICKED(IDC_CHECK_ENABLE_KEYBIND, &CFilterKeySettingDlg::OnBnClickedCheckE
 ON_BN_CLICKED(IDC_CHECK_ENABLE_TOGGLE_KEYBIND, &CFilterKeySettingDlg::OnBnClickedCheckEnableToggleKeybind)
 ON_BN_CLICKED(IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER, &CFilterKeySettingDlg::OnBnClickedCheckSetMouseDblclickTracker)
 ON_BN_CLICKED(IDC_CHECK_DISABLE_WITH_ESC, &CFilterKeySettingDlg::OnBnClickedCheckDisableWithEsc)
+ON_BN_CLICKED(IDC_CHECK_DISABLE_WITH_ENTER, &CFilterKeySettingDlg::OnBnClickedCheckDisableWithEnter)
 END_MESSAGE_MAP()
 
 // CFilterKeySettingDlg message handlers
@@ -176,6 +179,9 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   }
 
   FilterKey::BackupCurrentFilterKeysToOption();
+
+  // 자동 실행 등록 자가 치유 (exe 이동 대비 경로 갱신, 관리자 모드 선택 후 재시작 시 작업 등록 완료)
+  AutoStart::HealOnStartup(FilterKey::IsProcessElevatedNow());
 
   InitializePresetCount();
   BuildPresetButtons();
@@ -209,9 +215,19 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
     { IDC_CHECK_MOVE_TO_TRAY, IDS_CHK_MOVE_TO_TRAY },
     { IDC_CHECK_ENABLE_KEYBIND, IDS_CHK_ENABLE_KEYBIND },
     { IDC_CHECK_DISABLE_WITH_ESC, IDS_CHK_DISABLE_WITH_ESC },
+    { IDC_CHECK_DISABLE_WITH_ENTER, IDS_CHK_DISABLE_WITH_ENTER },
     { IDC_STATIC_INFO_HINT, IDS_LBL_INFO_HINT },
   };
   Lang::ApplyControlTexts(this, kMainDlgTexts, _countof(kMainDlgTexts));
+
+  // 자동 실행(/autostart)으로 시작되었고 트레이 시작 옵션이 켜져 있으면 트레이로 최소화 시작
+  // (관리자(작업 스케줄러) 모드 전용: 일반 모드는 시작 안내창 등과 겹치므로 적용하지 않음)
+  if (CString(::GetCommandLine()).Find(AutoStart::kAutoStartArg) >= 0 &&
+      GLOBAL_OPTION.getInteger(KEY_AUTOSTART_MODE, AUTOSTART_MODE_NONE) == AUTOSTART_MODE_TASK &&
+      GLOBAL_OPTION.getInteger(KEY_AUTOSTART_TRAY, 0) != 0)
+  {
+    PostMessage(WM_START_MINIMIZED_TO_TRAY);
+  }
 
   // Set initial focus to the OFF preset button if available
   if (auto* off_button = GetDlgItem(GetPresetButtonControlId(PRESET_OFF));
@@ -223,6 +239,17 @@ BOOL CFilterKeySettingDlg::OnInitDialog()
   }
 
   return TRUE;  // return TRUE  unless you set the focus to a control
+}
+
+LRESULT CFilterKeySettingDlg::OnStartMinimizedToTray(WPARAM wParam, LPARAM lParam)
+{
+  UNREFERENCED_PARAMETER(wParam);
+  UNREFERENCED_PARAMETER(lParam);
+
+  if (AddTrayIcon())
+    ShowWindow(SW_HIDE);
+
+  return 0;
 }
 
 // If you add a minimize button to your dialog, you will need the code below
@@ -264,13 +291,6 @@ HCURSOR CFilterKeySettingDlg::OnQueryDragIcon()
 
 void CFilterKeySettingDlg::OnDestroy()
 {
-  if (bg_esc_watch_active_)
-  {
-    KillTimer(TIMER_BG_ESC_WATCH);
-    bg_esc_watch_active_ = false;
-    bg_esc_prev_down_    = false;
-  }
-
   if (process_watch_active_)
   {
     KillTimer(TIMER_PROCESS_WATCHER);
@@ -347,6 +367,19 @@ LRESULT CFilterKeySettingDlg::OnRawInput(WPARAM wParam, LPARAM lParam)
     return 0;
   raw_input_key_down_[vk] = true;
 
+  // 백그라운드에서 ESC / Enter 입력 시 필터키 끄기: 폴링(타이머) 대신 이벤트 기반으로 처리해
+  // 반응 지연과 오작동(채팅창 깜빡임 등)을 최소화한다. (여전히 가로채기가 아닌 관찰이므로 100% 보장은 아님)
+  if (vk == VK_ESCAPE)
+    HandleBackgroundKeyOff(VK_ESCAPE, KEY_DISABLE_WITH_ESC, _T("Background ESC (RawInput)"));
+  else if (vk == VK_RETURN)
+    HandleBackgroundKeyOff(VK_RETURN, KEY_DISABLE_WITH_ENTER, _T("Background Enter (RawInput)"));
+
+  // 핫키 해석은 RawInput 핫키 모드(전체화면 게임 옵션)일 때만 수행한다.
+  // RegisterHotKey 모드에서도 Enter 끄기용으로 RawInput이 켜져 있을 수 있으므로,
+  // 여기서 게이트하지 않으면 핫키가 WM_HOTKEY와 중복 발동된다.
+  if (!using_raw_input_mode_)
+    return 0;
+
   if (KeyBinding::IsModifierVirtualKey(vk))
     return 0;
 
@@ -359,32 +392,6 @@ LRESULT CFilterKeySettingDlg::OnRawInput(WPARAM wParam, LPARAM lParam)
 
 void CFilterKeySettingDlg::OnTimer(UINT_PTR nIDEvent)
 {
-  if (nIDEvent == TIMER_BG_ESC_WATCH)
-  {
-    const bool esc_down  = ((::GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0);
-    const bool edge_down = (esc_down && !bg_esc_prev_down_);
-    bg_esc_prev_down_    = esc_down;
-
-    if (!edge_down)
-      return;
-
-    if (IsDialogForeground())
-      return;
-
-    if (const UINT modifiers = KeyBinding::CurrentModifiers(); modifiers != 0)
-      return;
-
-    if (KeyBinding::IsActiveHotkeyAssigned(VK_ESCAPE, 0, preset_count_))
-      return;
-
-    if (GLOBAL_OPTION.getInteger(KEY_LAST_PRESET) == static_cast<DWORD>(PRESET_OFF))
-      return;
-
-    ResetEditMode();
-    ActivatePreset(PRESET_OFF, FALSE, TRUE, _T("Background ESC"));
-    return;
-  }
-
   if (nIDEvent == TIMER_PROCESS_WATCHER)
   {
     TickProcessWatcher();
@@ -557,13 +564,9 @@ LRESULT CFilterKeySettingDlg::OnClearAppDataAndExit(WPARAM wParam, LPARAM lParam
   // 레지스트리(설정) + 자동시작 항목 삭제
   ::SHDeleteKey(HKEY_CURRENT_USER, USER_REGISTRY_PATH);
 
-  static constexpr LPCTSTR kRunPath = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-  HKEY hKey = nullptr;
-  if (::RegOpenKeyEx(HKEY_CURRENT_USER, kRunPath, 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-  {
-    ::RegDeleteValue(hKey, GetAppName());
-    ::RegCloseKey(hKey);
-  }
+  AutoStart::DeleteRunKey();
+  if (AutoStart::IsTaskRegistered())
+    AutoStart::DeleteTask();  // best-effort (비관리자면 실패할 수 있음)
 
   // 정상 종료 시퀀스 (X 버튼 / 트레이 종료와 동일)
   RemoveTrayIcon();
@@ -688,11 +691,11 @@ void CFilterKeySettingDlg::RegisterPresetHotkeys()
       DevLog::Write(_T("[Hotkey] mode changed: disabled"));
     using_raw_input_mode_ = false;
 
-    UnregisterRawInputHotkeys();
     KeyBinding::UnregisterConfiguredHotkeys(GetSafeHwnd(), preset_count_, hotkey_registered_,
                                             &toggle_hotkey_registered_,
                                             KeyBinding::HOTKEY_ID_BASE,
                                             KeyBinding::TOGGLE_HOTKEY_ID);
+    SyncRawInputDevice();
     return;
   }
 
@@ -706,7 +709,7 @@ void CFilterKeySettingDlg::RegisterPresetHotkeys()
                                             &toggle_hotkey_registered_,
                                             KeyBinding::HOTKEY_ID_BASE,
                                             KeyBinding::TOGGLE_HOTKEY_ID);
-    RegisterRawInputHotkeys();
+    SyncRawInputDevice();
     return;
   }
 
@@ -714,11 +717,11 @@ void CFilterKeySettingDlg::RegisterPresetHotkeys()
     DevLog::Write(_T("[Hotkey] mode changed: RegisterHotKey"));
   using_raw_input_mode_ = false;
 
-  UnregisterRawInputHotkeys();
   KeyBinding::RegisterConfiguredHotkeys(GetSafeHwnd(), preset_count_, hotkey_registered_,
                                         &toggle_hotkey_registered_,
                                         KeyBinding::HOTKEY_ID_BASE,
                                         KeyBinding::TOGGLE_HOTKEY_ID);
+  SyncRawInputDevice();
 }
 
 void CFilterKeySettingDlg::UnregisterPresetHotkeys()
@@ -1088,6 +1091,31 @@ void CFilterKeySettingDlg::OnBnClickedCheckDisableWithEsc()
       if (KeyBinding::IsActiveHotkeyAssigned(VK_ESCAPE, 0, preset_count_))
       {
         AfxMessageBox(Lang::T(IDS_MSG_ESC_HOTKEY_CONFLICT));
+      }
+    }
+  }
+
+  UpdateOption();
+}
+
+void CFilterKeySettingDlg::OnBnClickedCheckDisableWithEnter()
+{
+  if (auto btn = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DISABLE_WITH_ENTER)); btn)
+  {
+    const bool checked  = (btn->GetCheck() == BST_CHECKED);
+    const bool previous = (GLOBAL_OPTION.getInteger(KEY_DISABLE_WITH_ENTER, 0) != 0);
+
+    if (!EnsureAdminGuardForOptionEnable(KEY_DISABLE_WITH_ENTER, checked, previous))
+    {
+      btn->SetCheck(BST_UNCHECKED);
+      return;
+    }
+
+    if (checked && !previous)
+    {
+      if (KeyBinding::IsActiveHotkeyAssigned(VK_RETURN, 0, preset_count_))
+      {
+        AfxMessageBox(Lang::T(IDS_MSG_ENTER_HOTKEY_CONFLICT));
       }
     }
   }
@@ -1474,6 +1502,12 @@ void CFilterKeySettingDlg::SyncOptionsFromUI()
     auto checked = btn ? btn->GetCheck() : false;
     GLOBAL_OPTION.set(KEY_DISABLE_WITH_ESC, static_cast<DWORD>(checked));
   }
+
+  {
+    btn          = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DISABLE_WITH_ENTER));
+    auto checked = btn ? btn->GetCheck() : false;
+    GLOBAL_OPTION.set(KEY_DISABLE_WITH_ENTER, static_cast<DWORD>(checked));
+  }
 }
 
 void CFilterKeySettingDlg::SyncOptionsToUI()
@@ -1490,6 +1524,7 @@ void CFilterKeySettingDlg::SyncOptionsToUI()
   SetCheck(IDC_CHECK_ENABLE_TOGGLE_KEYBIND, KEY_ENABLE_TOGGLE_KEYBIND);
   SetCheck(IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER, KEY_ENABLE_MOUSE_DBLCLICK_TRACKER);
   SetCheck(IDC_CHECK_DISABLE_WITH_ESC, KEY_DISABLE_WITH_ESC);
+  SetCheck(IDC_CHECK_DISABLE_WITH_ENTER, KEY_DISABLE_WITH_ENTER);
 
   if (auto toggle_edit = GetDlgItem(IDC_EDIT_TOGGLE_KEYBIND); toggle_edit)
     toggle_edit->EnableWindow(KeyBinding::IsToggleEnabled() ? TRUE : FALSE);
@@ -1521,40 +1556,44 @@ void CFilterKeySettingDlg::ApplySubsystemOptions()
     mouse_tracker_.Release();
   }
 
-  UpdateEscDisableHotkeyRegistration();
+  SyncRawInputDevice();
   UpdateProcessWatcherRegistration();
 }
 
-void CFilterKeySettingDlg::UpdateEscDisableHotkeyRegistration()
+// ESC / Enter 백그라운드 끄기 기능은 RawInput(WM_INPUT) 이벤트로 감지한다.
+// 전체화면 핫키 모드 또는 두 옵션 중 하나라도 켜져 있으면 키보드 RawInput 장치를 등록/유지한다.
+void CFilterKeySettingDlg::SyncRawInputDevice()
 {
-  const bool enabled = (GLOBAL_OPTION.getInteger(KEY_DISABLE_WITH_ESC) != 0);
-  if (enabled)
-  {
-    if (!bg_esc_watch_active_)
-    {
-      if (SetTimer(TIMER_BG_ESC_WATCH, 25, nullptr) != 0)
-      {
-        bg_esc_watch_active_ = true;
-        bg_esc_prev_down_    = false;
-      }
-      else
-      {
-        TRACE(_T("SetTimer failed. esc disable watcher, error=%lu\n"), GetLastError());
-        GLOBAL_OPTION.set(KEY_DISABLE_WITH_ESC, static_cast<DWORD>(false));
-        if (auto esc_button = static_cast<CButton*>(GetDlgItem(IDC_CHECK_DISABLE_WITH_ESC)); esc_button)
-          esc_button->SetCheck(BST_UNCHECKED);
-      }
-    }
-  }
+  const bool need = using_raw_input_mode_ ||
+                    (GLOBAL_OPTION.getInteger(KEY_DISABLE_WITH_ESC) != 0) ||
+                    (GLOBAL_OPTION.getInteger(KEY_DISABLE_WITH_ENTER) != 0);
+
+  if (need)
+    RegisterRawInputHotkeys();
   else
-  {
-    if (bg_esc_watch_active_)
-    {
-      KillTimer(TIMER_BG_ESC_WATCH);
-      bg_esc_watch_active_ = false;
-      bg_esc_prev_down_    = false;
-    }
-  }
+    UnregisterRawInputHotkeys();
+}
+
+// 백그라운드에서 지정한 키가 눌렸을 때 필터키(프리셋)를 OFF로 전환한다. (OnRawInput에서 호출)
+void CFilterKeySettingDlg::HandleBackgroundKeyOff(UINT vk, LPCTSTR option_key, LPCTSTR reason)
+{
+  if (GLOBAL_OPTION.getInteger(option_key) == 0)
+    return;
+
+  if (IsDialogForeground())
+    return;
+
+  if (KeyBinding::CurrentModifiers() != 0)
+    return;
+
+  if (KeyBinding::IsActiveHotkeyAssigned(vk, 0, preset_count_))
+    return;
+
+  if (GLOBAL_OPTION.getInteger(KEY_LAST_PRESET) == static_cast<DWORD>(PRESET_OFF))
+    return;
+
+  ResetEditMode();
+  ActivatePreset(PRESET_OFF, FALSE, TRUE, reason);
 }
 
 void CFilterKeySettingDlg::UpdateProcessWatcherRegistration()
@@ -1956,6 +1995,7 @@ void CFilterKeySettingDlg::LayoutDynamicControls()
     IDC_CHECK_ENABLE_KEYBIND,
     IDC_CHECK_SET_MOUSE_DBLCLICK_TRACKER,
     IDC_CHECK_DISABLE_WITH_ESC,
+    IDC_CHECK_DISABLE_WITH_ENTER,
     IDC_CHECK_ENABLE_TOGGLE_KEYBIND,
     IDC_EDIT_TOGGLE_KEYBIND,
     IDC_STATIC_INFO_HINT,

@@ -3,6 +3,7 @@
 #include "DialogDebug.h"
 #include "FilterKeySetting.h"
 #include "UserAdminGuard.hpp"
+#include "UserAutoStart.hpp"
 #include "UserFilterKey.hpp"
 #include "UserLanguage.hpp"
 #include "UserPresetOSD.hpp"
@@ -43,6 +44,9 @@ ON_BN_CLICKED(IDC_RADIO_PRESET_OSD_KEEP, &DialogDebug::OnBnClickedRadioPresetOsd
 ON_BN_CLICKED(IDC_RADIO_PRESET_OSD_3SEC, &DialogDebug::OnBnClickedRadioPresetOsd3sec)
 ON_CBN_SELCHANGE(IDC_COMBO_MOVE_SENSITIVITY, &DialogDebug::OnCbnSelchangeComboMouseSensitivity)
 ON_BN_CLICKED(IDC_CHECK_AUTO_START, &DialogDebug::OnBnClickedCheckAutoStart)
+ON_BN_CLICKED(IDC_RADIO_AUTOSTART_NORMAL, &DialogDebug::OnBnClickedRadioAutostartNormal)
+ON_BN_CLICKED(IDC_RADIO_AUTOSTART_ADMIN, &DialogDebug::OnBnClickedRadioAutostartAdmin)
+ON_BN_CLICKED(IDC_CHECK_AUTOSTART_TRAY, &DialogDebug::OnBnClickedCheckAutostartTray)
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS, &DialogDebug::OnBnClickedCheckPresetOffProcess)
 ON_BN_CLICKED(IDC_CHECK_PRESET_OFF_PROCESS_RESTORE, &DialogDebug::OnBnClickedCheckPresetOffProcessRestore)
 ON_BN_CLICKED(IDC_CHECK_IF_FULL_SCREEN_GAME, &DialogDebug::OnBnClickedCheckIfFullScreenGame)
@@ -83,6 +87,9 @@ BOOL DialogDebug::OnInitDialog()
     { IDC_CHECK_DISABLE_HOTKEY, IDS_CHK_DISABLE_HOTKEY },
     { IDC_STATIC_MOVE_SENSITIVITY_LABEL, IDS_LBL_MOVE_SENSITIVITY },
     { IDC_CHECK_AUTO_START, IDS_CHK_AUTO_START },
+    { IDC_RADIO_AUTOSTART_NORMAL, IDS_RDO_AUTOSTART_NORMAL },
+    { IDC_RADIO_AUTOSTART_ADMIN, IDS_RDO_AUTOSTART_ADMIN },
+    { IDC_CHECK_AUTOSTART_TRAY, IDS_CHK_AUTOSTART_TRAY },
     { IDC_CHECK_ENABLE_PRESET_OSD, IDS_CHK_ENABLE_PRESET_OSD },
     { IDC_STATIC_PRESET_OSD_ALPHA, IDS_LBL_OSD_ALPHA_TRANSPARENT },
     { IDC_STATIC_PRESET_OSD_DURATION, IDS_LBL_OSD_DURATION },
@@ -361,76 +368,162 @@ void DialogDebug::OnBnClickedCheckMuteSound()
   NotifyOptionsChanged();
 }
 
+void DialogDebug::PromptRestartAsAdmin()
+{
+  CString msg = Lang::T(IDS_MSG_ADMIN_GENERIC) + Lang::T(IDS_MSG_ADMIN_RESTART_SUFFIX);
+  if (AfxMessageBox(msg, MB_YESNO | MB_ICONINFORMATION) == IDYES)
+  {
+    if (!FilterKey::RestartProgram(this, true))
+      AfxMessageBox(Lang::T(IDS_MSG_RESTART_FAILED));
+  }
+}
+
+void DialogDebug::UpdateAutoStartControlStates()
+{
+  auto*      check   = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTO_START));
+  const bool enabled = (check && check->GetCheck() == BST_CHECKED);
+  const bool admin   = (GetCheckedRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN) ==
+                      IDC_RADIO_AUTOSTART_ADMIN);
+
+  if (auto* ctrl = GetDlgItem(IDC_RADIO_AUTOSTART_NORMAL); ctrl)
+    ctrl->EnableWindow(enabled ? TRUE : FALSE);
+  if (auto* ctrl = GetDlgItem(IDC_RADIO_AUTOSTART_ADMIN); ctrl)
+    ctrl->EnableWindow(enabled ? TRUE : FALSE);
+
+  // 트레이 시작은 관리자(작업 스케줄러) 모드 전용 (일반 모드는 시작 안내창과 겹침)
+  if (auto* ctrl = GetDlgItem(IDC_CHECK_AUTOSTART_TRAY); ctrl)
+    ctrl->EnableWindow((enabled && admin) ? TRUE : FALSE);
+}
+
 void DialogDebug::InitializeAutoStart()
 {
   auto* check = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTO_START));
   if (!check)
     return;
 
-  static constexpr LPCTSTR kRunPath = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+  DWORD mode = GLOBAL_OPTION.getInteger(KEY_AUTOSTART_MODE, AUTOSTART_MODE_NONE);
 
-  HKEY hKey = nullptr;
-  if (::RegOpenKeyEx(HKEY_CURRENT_USER, kRunPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+  // 구버전 마이그레이션: 모드 값이 없어도 Run 항목이 있으면 '일반'으로 간주하고 새 형식으로 재등록
+  if (mode == AUTOSTART_MODE_NONE && AutoStart::IsRunKeyRegistered())
   {
-    check->SetCheck(BST_UNCHECKED);
-    DevLog::Write(_T("[AutoStart] Run registry open failed. checkbox=OFF"));
-    return;
+    mode = AUTOSTART_MODE_RUN;
+    GLOBAL_OPTION.set(KEY_AUTOSTART_MODE, mode);
+    AutoStart::RegisterRunKey();
   }
 
-  TCHAR reg_path[MAX_PATH] = {};
-  DWORD size               = sizeof(reg_path);
-  DWORD type               = 0;
-  LONG  result             = ::RegQueryValueEx(hKey, GetAppName(), nullptr, &type, reinterpret_cast<LPBYTE>(reg_path), &size);
-  ::RegCloseKey(hKey);
+  check->SetCheck(mode != AUTOSTART_MODE_NONE ? BST_CHECKED : BST_UNCHECKED);
+  CheckRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN,
+                   mode == AUTOSTART_MODE_TASK ? IDC_RADIO_AUTOSTART_ADMIN : IDC_RADIO_AUTOSTART_NORMAL);
 
-  TCHAR exe_path[MAX_PATH] = {};
-  ::GetModuleFileName(nullptr, exe_path, MAX_PATH);
+  if (auto* tray = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTOSTART_TRAY)); tray)
+    tray->SetCheck(GLOBAL_OPTION.getInteger(KEY_AUTOSTART_TRAY, 0) != 0 ? BST_CHECKED : BST_UNCHECKED);
 
-  if (result != ERROR_SUCCESS || type != REG_SZ)
-  {
-    check->SetCheck(BST_UNCHECKED);
-    DevLog::Writef(_T("[AutoStart] Run entry not found. checkbox=OFF, exe=%s"), exe_path);
-    return;
-  }
-
-  const bool match = (_tcsicmp(reg_path, exe_path) == 0);
-  check->SetCheck(match ? BST_CHECKED : BST_UNCHECKED);
-  DevLog::Writef(_T("[AutoStart] checkbox=%s, match=%s\r\n  registered=%s\r\n  current=%s"),
-                 match ? _T("ON") : _T("OFF"),
-                 match ? _T("YES") : _T("NO (exe moved?)"),
-                 reg_path, exe_path);
+  UpdateAutoStartControlStates();
+  DevLog::Writef(_T("[AutoStart] init mode=%lu tray=%lu"),
+                 mode, GLOBAL_OPTION.getInteger(KEY_AUTOSTART_TRAY, 0));
 }
 
 void DialogDebug::OnBnClickedCheckAutoStart()
 {
-  auto*      check   = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTO_START));
-  const bool enabled = (check && check->GetCheck() == BST_CHECKED);
+  auto* check = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTO_START));
+  if (!check)
+    return;
 
-  static constexpr LPCTSTR kRunPath = _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-
-  HKEY hKey = nullptr;
-  if (::RegOpenKeyEx(HKEY_CURRENT_USER, kRunPath, 0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+  if (check->GetCheck() == BST_CHECKED)
   {
-    DevLog::Writef(_T("[AutoStart] Run registry open failed (KEY_SET_VALUE). error=%lu"), ::GetLastError());
+    // 현재 선택된 라디오 방식으로 즉시 등록
+    const bool admin = (GetCheckedRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN) ==
+                        IDC_RADIO_AUTOSTART_ADMIN);
+    UpdateAutoStartControlStates();
+
+    if (admin)
+      OnBnClickedRadioAutostartAdmin();
+    else
+      OnBnClickedRadioAutostartNormal();
     return;
   }
 
-  if (enabled)
+  // 해제: Run 키 + 작업 모두 제거
+  AutoStart::DeleteRunKey();
+
+  if (AutoStart::IsTaskRegistered() && !AutoStart::DeleteTask())
   {
-    TCHAR exe_path[MAX_PATH] = {};
-    ::GetModuleFileName(nullptr, exe_path, MAX_PATH);
-    LONG res = ::RegSetValueEx(hKey, GetAppName(), 0, REG_SZ,
-                               reinterpret_cast<const BYTE*>(exe_path),
-                               static_cast<DWORD>((_tcslen(exe_path) + 1) * sizeof(TCHAR)));
-    DevLog::Writef(_T("[AutoStart] Registered: result=%ld, path=%s"), res, exe_path);
-  }
-  else
-  {
-    LONG res = ::RegDeleteValue(hKey, GetAppName());
-    DevLog::Writef(_T("[AutoStart] Unregistered: result=%ld"), res);
+    // 최고 권한 작업 삭제는 관리자 권한 필요 → 재시작 안내, 체크 상태 유지
+    PromptRestartAsAdmin();
+    check->SetCheck(BST_CHECKED);
+    UpdateAutoStartControlStates();
+    return;
   }
 
-  ::RegCloseKey(hKey);
+  GLOBAL_OPTION.set(KEY_AUTOSTART_MODE, AUTOSTART_MODE_NONE);
+  UpdateAutoStartControlStates();
+  DevLog::Write(_T("[AutoStart] Unregistered"));
+}
+
+void DialogDebug::OnBnClickedRadioAutostartNormal()
+{
+  CheckRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN, IDC_RADIO_AUTOSTART_NORMAL);
+
+  // 관리자 작업이 남아 있으면 제거 (비관리자면 실패 → 재시작 안내 후 관리자 선택 유지)
+  if (AutoStart::IsTaskRegistered() && !AutoStart::DeleteTask())
+  {
+    PromptRestartAsAdmin();
+    CheckRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN, IDC_RADIO_AUTOSTART_ADMIN);
+    UpdateAutoStartControlStates();
+    return;
+  }
+
+  if (!AutoStart::RegisterRunKey())
+  {
+    AfxMessageBox(Lang::T(IDS_MSG_AUTOSTART_TASK_FAILED));
+    UpdateAutoStartControlStates();
+    return;
+  }
+
+  GLOBAL_OPTION.set(KEY_AUTOSTART_MODE, AUTOSTART_MODE_RUN);
+  UpdateAutoStartControlStates();
+  DevLog::Write(_T("[AutoStart] Registered: run key"));
+}
+
+void DialogDebug::OnBnClickedRadioAutostartAdmin()
+{
+  CheckRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN, IDC_RADIO_AUTOSTART_ADMIN);
+
+  // 선택은 즉시 저장. 비관리자면 재시작 안내 후 다음 관리자 실행에서 자동 등록(HealOnStartup).
+  GLOBAL_OPTION.set(KEY_AUTOSTART_MODE, AUTOSTART_MODE_TASK);
+
+  if (!FilterKey::IsProcessElevatedNow())
+  {
+    PromptRestartAsAdmin();
+    UpdateAutoStartControlStates();
+    DevLog::Write(_T("[AutoStart] task pending (needs admin run)"));
+    return;
+  }
+
+  AutoStart::DeleteRunKey();
+  if (!AutoStart::RegisterTask())
+  {
+    // 등록 실패 → 일반 방식으로 복귀
+    AfxMessageBox(Lang::T(IDS_MSG_AUTOSTART_TASK_FAILED));
+    CheckRadioButton(IDC_RADIO_AUTOSTART_NORMAL, IDC_RADIO_AUTOSTART_ADMIN, IDC_RADIO_AUTOSTART_NORMAL);
+    GLOBAL_OPTION.set(KEY_AUTOSTART_MODE, AUTOSTART_MODE_RUN);
+    AutoStart::RegisterRunKey();
+    UpdateAutoStartControlStates();
+    return;
+  }
+
+  UpdateAutoStartControlStates();
+  DevLog::Write(_T("[AutoStart] Registered: task scheduler (highest)"));
+}
+
+void DialogDebug::OnBnClickedCheckAutostartTray()
+{
+  if (auto* tray = static_cast<CButton*>(GetDlgItem(IDC_CHECK_AUTOSTART_TRAY)); tray)
+  {
+    const bool checked = (tray->GetCheck() == BST_CHECKED);
+    GLOBAL_OPTION.set(KEY_AUTOSTART_TRAY, static_cast<DWORD>(checked ? 1 : 0));
+    DevLog::Writef(_T("Option changed: autostart tray = %d"), checked ? 1 : 0);
+  }
 }
 
 void DialogDebug::OnBnClickedBtnClearAppData()

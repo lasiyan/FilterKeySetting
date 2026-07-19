@@ -43,6 +43,9 @@ class DialogDebug : public CDialogEx, public DevLogSink
   afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
   afx_msg void OnCbnSelchangeComboMouseSensitivity();
   afx_msg void OnBnClickedCheckAutoStart();
+  afx_msg void OnBnClickedRadioAutostartNormal();
+  afx_msg void OnBnClickedRadioAutostartAdmin();
+  afx_msg void OnBnClickedCheckAutostartTray();
   afx_msg void OnBnClickedCheckPresetOffProcess();
   afx_msg void OnBnClickedCheckPresetOffProcessRestore();
   afx_msg void OnBnClickedCheckIfFullScreenGame();
@@ -63,6 +66,8 @@ class DialogDebug : public CDialogEx, public DevLogSink
   void InitializeOsdOptions();
   void InitializeMouseSensitivity();
   void InitializeAutoStart();
+  void UpdateAutoStartControlStates();
+  void PromptRestartAsAdmin();
   void InitializeProcessOffOptions();
   void UpdateProcessOffControlStates();
   void BrowseProcessFile();

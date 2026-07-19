@@ -19,6 +19,7 @@ class DialogKeyBinding : public CDialogEx
   virtual void DoDataExchange(CDataExchange* pDX);
   virtual BOOL PreTranslateMessage(MSG* pMsg);
   virtual BOOL OnInitDialog();
+  virtual void OnOK();
 
   DECLARE_MESSAGE_MAP()
 

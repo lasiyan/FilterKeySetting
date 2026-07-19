@@ -48,6 +48,7 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg LRESULT OnDebugOptionsChanged(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnActivateExisting(WPARAM wParam, LPARAM lParam);
   afx_msg LRESULT OnClearAppDataAndExit(WPARAM wParam, LPARAM lParam);
+  afx_msg LRESULT OnStartMinimizedToTray(WPARAM wParam, LPARAM lParam);
   BOOL            PreTranslateMessage(MSG* pMsg) override;
   DECLARE_MESSAGE_MAP()
 
@@ -60,6 +61,7 @@ class CFilterKeySettingDlg : public CDialogEx
   afx_msg void OnBnClickedCheckEnableToggleKeybind();
   afx_msg void OnBnClickedCheckSetMouseDblclickTracker();
   afx_msg void OnBnClickedCheckDisableWithEsc();
+  afx_msg void OnBnClickedCheckDisableWithEnter();
 
   // Focus handlers
   afx_msg void OnEnSetFocusTesting();
@@ -94,7 +96,7 @@ class CFilterKeySettingDlg : public CDialogEx
   void           RefreshPresetButtonCaption(const int preset);
   void           RefreshAllPresetButtonCaptions();
   void           RefreshToggleHotkeyEditText();
-  void           UpdateEscDisableHotkeyRegistration();
+  void           HandleBackgroundKeyOff(UINT vk, LPCTSTR option_key, LPCTSTR reason);
   void           UpdateProcessWatcherRegistration();
   void           TickProcessWatcher();
   static CString GetForegroundProcessName();
@@ -111,6 +113,7 @@ class CFilterKeySettingDlg : public CDialogEx
   void UnregisterPresetHotkeys();
   bool RegisterRawInputHotkeys();
   void UnregisterRawInputHotkeys();
+  void SyncRawInputDevice();
   void UpdateRawInputModifierState(UINT vk, bool key_down);
   int  ResolveRawInputHotkeyId(UINT vk, UINT modifiers) const;
   bool HandleResolvedHotkeyId(UINT hotkey_id, bool from_raw_input);
@@ -138,8 +141,8 @@ class CFilterKeySettingDlg : public CDialogEx
  public:
   static constexpr UINT     WM_TRAYICON_MSG             = WM_APP + 1;
   static constexpr UINT     WM_CLEAR_APP_DATA_AND_EXIT  = WM_APP + 62;
+  static constexpr UINT     WM_START_MINIMIZED_TO_TRAY  = WM_APP + 63;
   static constexpr UINT     WM_ACTIVATE_EXISTING_INST   = WM_APP + 100;
-  static constexpr UINT_PTR TIMER_BG_ESC_WATCH          = 0x12F1;
   static constexpr UINT_PTR TIMER_PROCESS_WATCHER       = 0x12F2;
   static constexpr UINT     TRAY_ICON_ID                = 1;
   static constexpr UINT     dynamic_preset_button_base_ = 2000;
@@ -165,10 +168,6 @@ class CFilterKeySettingDlg : public CDialogEx
   std::vector<std::unique_ptr<CButton>> preset_buttons_;
   bool                                  alt_hotkey_view_              = false;
   bool                                  opening_toggle_hotkey_dialog_ = false;
-
-  // Background ESC watcher
-  bool bg_esc_watch_active_ = false;
-  bool bg_esc_prev_down_    = false;
 
   // Process watcher
   bool    process_watch_active_       = false;

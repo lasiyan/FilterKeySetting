@@ -18,6 +18,7 @@
 #define KEY_MOUSE_MOVE_SENSITIVITY        (_T("mouse_move_sensitivity"))
 #define KEY_ENABLE_MOUSE_DBLCLICK_TRACKER (_T("enable_mouse_dblclick_tracker"))
 #define KEY_DISABLE_WITH_ESC              (_T("disable_with_esc"))
+#define KEY_DISABLE_WITH_ENTER            (_T("disable_with_enter"))
 #define KEY_PROCESS_OFF_ENABLED           (_T("process_off_enabled"))
 #define KEY_PROCESS_OFF_NAME              (_T("process_off_name"))
 #define KEY_PROCESS_OFF_RESTORE           (_T("process_off_restore"))
@@ -38,6 +39,13 @@
 #define KEY_FILTERKEY_BACKUP_REPEAT       (_T("filterkey_backup_repeat"))
 #define KEY_FILTERKEY_BACKUP_FLAGS        (_T("filterkey_backup_flags"))
 #define KEY_LANGUAGE                      (_T("language"))
+#define KEY_AUTOSTART_MODE                (_T("autostart_mode"))
+#define KEY_AUTOSTART_TRAY                (_T("autostart_tray"))
+
+// Auto-start mode values (KEY_AUTOSTART_MODE)
+static constexpr DWORD AUTOSTART_MODE_NONE = 0;  // 사용 안 함
+static constexpr DWORD AUTOSTART_MODE_RUN  = 1;  // Run 키 (일반 권한)
+static constexpr DWORD AUTOSTART_MODE_TASK = 2;  // 작업 스케줄러 (관리자, UAC 없음)
 
 // Registry keys - preset options
 #define KEY_PRESET_TITLE  (_T("preset_title"))

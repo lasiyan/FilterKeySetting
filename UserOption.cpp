@@ -24,6 +24,7 @@ bool InitializeOptionValues()
     res &= GLOBAL_OPTION.setInit(KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, false);
     res &= GLOBAL_OPTION.setInit(KEY_ENABLE_MOUSE_MOVE_TRACKER, false);
     res &= GLOBAL_OPTION.setInit(KEY_DISABLE_WITH_ESC, false);
+    res &= GLOBAL_OPTION.setInit(KEY_DISABLE_WITH_ENTER, false);
     res &= GLOBAL_OPTION.setInit(KEY_PROCESS_OFF_ENABLED, false);
     res &= GLOBAL_OPTION.setInit(KEY_PROCESS_OFF_NAME, CString());
     res &= GLOBAL_OPTION.setInit(KEY_PROCESS_OFF_RESTORE, true);
@@ -44,6 +45,8 @@ bool InitializeOptionValues()
     res &= GLOBAL_OPTION.setInit(KEY_FILTERKEY_BACKUP_REPEAT, static_cast<DWORD>(DEFAULT_REPEAT_RATE));
     res &= GLOBAL_OPTION.setInit(KEY_FILTERKEY_BACKUP_FLAGS, static_cast<DWORD>(WINDOW_FILTER_FLAG));
     res &= GLOBAL_OPTION.setInit(KEY_LANGUAGE, static_cast<DWORD>(Lang::DetectSystemDefault()));
+    res &= GLOBAL_OPTION.setInit(KEY_AUTOSTART_MODE, AUTOSTART_MODE_NONE);
+    res &= GLOBAL_OPTION.setInit(KEY_AUTOSTART_TRAY, false);
   }
 
   // Preset Generator

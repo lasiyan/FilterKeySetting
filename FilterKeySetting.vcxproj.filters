@@ -39,6 +39,9 @@
     <ClInclude Include="DialogKeyBinding.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="UserAutoStart.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="UserFilterKey.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>

@@ -19,10 +19,11 @@ struct AdminRequiredOption
   UINT    label_ids;
 };
 
-constexpr std::array<AdminRequiredOption, 7> kAdminRequiredOptions = {
+constexpr std::array<AdminRequiredOption, 8> kAdminRequiredOptions = {
   AdminRequiredOption{ KEY_ENABLE_KEYBIND, IDS_CHK_ENABLE_KEYBIND },
   AdminRequiredOption{ KEY_ENABLE_TOGGLE_KEYBIND, IDS_CHK_TOGGLE_KEYBIND },
   AdminRequiredOption{ KEY_DISABLE_WITH_ESC, IDS_CHK_DISABLE_WITH_ESC },
+  AdminRequiredOption{ KEY_DISABLE_WITH_ENTER, IDS_CHK_DISABLE_WITH_ENTER },
   AdminRequiredOption{ KEY_IF_FULL_SCREEN_GAME, IDS_CHK_IF_FULL_SCREEN_GAME },
   AdminRequiredOption{ KEY_ENABLE_MOUSE_MOVE_TRACKER, IDS_CHK_DBG_MOVE_TRACKER },
   AdminRequiredOption{ KEY_ENABLE_MOUSE_DBLCLICK_TRACKER, IDS_CHK_MOUSE_DBLCLICK_TRACKER },
@@ -167,7 +168,7 @@ HRESULT CALLBACK PromptCallback(HWND hwnd, UINT notification, WPARAM wParam, LPA
 
 }  // namespace
 
-const std::array<LPCTSTR, 7>& GetAdminRequiredOptionList()
+const std::array<LPCTSTR, 8>& GetAdminRequiredOptionList()
 {
   static const auto keys = []() {
     std::array<LPCTSTR, kAdminRequiredOptions.size()> values = {};
